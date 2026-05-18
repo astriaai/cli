@@ -559,17 +559,18 @@ def _generate(args, cfg, video):
             form.append(field("prompt[video_duration]", args.duration))
         for opt, prefix in (("first_frame", "prompt[video_first_frame]"),
                             ("last_frame", "prompt[video_last_frame]"),
-                            ("input_video", "prompt[input_video]")):
+                            ("input_video", "prompt[input_video]"),
+                            ("audio_reference", "prompt[audio_reference]")):
             value = getattr(args, opt, None)
             if value:
                 key, resolved = media_field(prefix, value)
                 form.append(field(key, resolved))
+        if args.generate_audio is not None:
+            form.append(field("prompt[generate_audio]",
+                               "true" if args.generate_audio else "false"))
 
     prompt = request(cfg, "POST", f"/tunes/{tune_id}/prompts", form=form, workspace=args.workspace)
     prompt = prompt[0] if isinstance(prompt, list) else prompt
-    if args.pack_id:
-        request(cfg, "PATCH", f"/tunes/{tune_id}/prompts/{prompt['id']}",
-                form=[field("prompt[pack_id]", args.pack_id)], workspace=args.workspace)
     if args.wait:
         prompt = poll_prompt(cfg, tune_id, prompt["id"], workspace=args.workspace)
     emit(prompt)
@@ -1019,12 +1020,12 @@ def image_model_help(rec, prefix="model name or tune id"):
     return f"{prefix} — {names}; omit for the default"
 
 
-def resolution_help(rec):
+def resolution_help(rec, noun="output resolution"):
     res = sorted({r for meta in (rec.get("models") or {}).values()
                   for r in (meta.get("resolutions") or [])})
     if not res:
-        return "output resolution; see 'astria models' for per-model supported values"
-    return ("output resolution, model-dependent — " + ", ".join(res)
+        return f"{noun}; see 'astria models' for per-model supported values"
+    return (f"{noun}, model-dependent — " + ", ".join(res)
             + "; see 'astria models' for each model's set")
 
 
@@ -1036,6 +1037,14 @@ def video_model_help(rec):
     names = ", ".join(f"{name} (default)" if name == default else name
                       for name in video_models)
     return "video model — " + names
+
+
+def video_capability_help(rec, flag, base):
+    models = [name for name, meta in (rec.get("video_models") or {}).items()
+              if meta.get(flag)]
+    if not models:
+        return base
+    return f"{base}; supported by {', '.join(models)}"
 
 
 def build_parser():
@@ -1134,10 +1143,9 @@ def build_parser():
     p.add_argument("--text", required=True, help="prompt text; embed references as <faceid:ID:1>")
     p.add_argument("--num-images")
     p.add_argument("--seed", help="generation seed; also makes an otherwise-identical prompt distinct")
-    p.add_argument("--aspect-ratio")
+    p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(models_record))
     p.add_argument("--input-image", help="URL or local file to edit")
-    p.add_argument("--pack-id", help="assign the new prompt to a pack")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
     p.set_defaults(func=cmd_generate)
 
@@ -1148,14 +1156,21 @@ def build_parser():
     p.add_argument("--video-model", required=True, help=video_model_help(models_record))
     p.add_argument("--video-prompt", required=True, help="motion / action description")
     p.add_argument("--duration", help="seconds (model-dependent)")
-    p.add_argument("--aspect-ratio")
-    p.add_argument("--resolution", help=resolution_help(models_record))
+    p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
+    p.add_argument("--resolution", help=resolution_help(
+        models_record, "first-frame image resolution (video resolution is set by --video-model)"))
     p.add_argument("--num-images")
     p.add_argument("--input-image")
     p.add_argument("--first-frame", help="URL or file overriding the rendered first frame")
     p.add_argument("--last-frame", help="URL or file for keyframe models")
     p.add_argument("--input-video", help="URL or file for motion-control models")
-    p.add_argument("--pack-id")
+    p.add_argument("--audio-reference", help=video_capability_help(
+        models_record, "supports_audio_reference",
+        "URL or file — reference audio track the video is driven by"))
+    p.add_argument("--generate-audio", action=argparse.BooleanOptionalAction, default=None,
+                   help=video_capability_help(
+                       models_record, "generates_audio",
+                       "generate a soundtrack; omit to use the model default"))
     p.add_argument("--wait", action="store_true")
     p.set_defaults(func=cmd_video)
 
