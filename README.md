@@ -37,6 +37,7 @@ astria tunes list --title "dress"               # find references
 astria generate --text "<faceid:123:1> woman, white studio" --num-images 4 --wait
 astria video  --text "a model on a runway" \
               --video-model seedance2_fast_720p --video-prompt "camera tracks her"
+astria prompts wait 555 556 557                  # block until each settles (images or user_error)
 astria download 555 556 --out ./shots           # download a prompt's images
 astria api GET /prompts --query limit=5          # raw API escape hatch
 ```
