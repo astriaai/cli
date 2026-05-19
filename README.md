@@ -31,7 +31,8 @@ bundles this CLI — no separate install needed.
 
 ```bash
 astria whoami                                   # the authenticated account
-astria models                                   # available models -> tune ids
+astria models                                   # popular models -> tune ids
+astria tunes list --gallery --branch partner-1   # discover every partner model
 astria tunes list --title "dress"               # find references
 astria generate --text "<faceid:123:1> woman, white studio" --num-images 4 --wait
 astria video  --text "a model on a runway" \
