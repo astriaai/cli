@@ -13,8 +13,9 @@ It's a single self-contained Python 3 script — only the standard library plus
 curl -fsSL https://raw.githubusercontent.com/astriaai/cli/main/install.sh | sh
 ```
 
-Installs `astria` to `/usr/local/bin` (override with `--prefix="$HOME/.local"`;
-pin a version with `--ref=v1.0.0`). Then authenticate once:
+Installs `astria` to a writable Homebrew bin when it is already on `PATH` (for example `/opt/homebrew/bin`), otherwise `~/.local/bin`. For a system install use
+`curl -fsSL https://raw.githubusercontent.com/astriaai/cli/main/install.sh | sh -s -- --prefix=/usr/local --sudo`;
+pin a version with `sh -s -- --ref=v1.0.0`. Then authenticate once:
 
 ```bash
 astria login        # prompts for an API key — astria.ai/users/edit/api
