@@ -18,7 +18,7 @@ Installs `astria` to a writable Homebrew bin when it is already on `PATH` (for e
 pin a version with `sh -s -- --ref=v1.0.0`. Then authenticate once:
 
 ```bash
-astria login        # prompts for an API key — astria.ai/users/edit/api
+astria login        # prompts for an API key — https://astria.ai/users/edit/api
 ```
 
 Already using **Claude Code**? The [`astria` plugin](https://github.com/astriaai/astria-claude-skills)
