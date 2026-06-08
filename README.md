@@ -24,6 +24,16 @@ astria login        # prompts for an API key — https://astria.ai/users/edit/ap
 Already using **Claude Code**? The [`astria` plugin](https://github.com/astriaai/astria-claude-skills)
 bundles this CLI — no separate install needed.
 
+## Upgrade
+
+```bash
+astria upgrade
+```
+
+This downloads the latest `astria` script and replaces the current executable
+in place. If your install path is not writable, rerun it with permissions to
+update that file.
+
 ## Requirements
 
 - **Python 3.8+** and **curl** — standard on macOS and Linux.
