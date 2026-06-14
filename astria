@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 
 def _platform_token():
@@ -778,10 +778,12 @@ def cmd_prompts_update(args, cfg):
     form = []
     if args.pack_id:
         form.append(field("prompt[pack_id]", args.pack_id))
+    if args.base_pack_id:
+        form.append(field("prompt[base_pack_id]", args.base_pack_id))
     if args.workspace_id:
         form.append(field("prompt[workspace_id]", args.workspace_id))
     if not form:
-        die("nothing to update — pass --pack-id or --workspace-id")
+        die("nothing to update — pass --pack-id, --base-pack-id or --workspace-id")
     emit(request(cfg, "PATCH", f"/tunes/{tune_id}/prompts/{args.id}", form=form, workspace=args.workspace))
 
 
@@ -1575,7 +1577,8 @@ def build_parser():
     p.add_argument("id")
     p.add_argument("--tune", help="tune id the prompt belongs to")
     p.add_argument("--model", help="model name instead of --tune")
-    p.add_argument("--pack-id")
+    p.add_argument("--pack-id", help="assign as a pack template prompt")
+    p.add_argument("--base-pack-id", help="bind as a pack one-off (board frame)")
     p.add_argument("--workspace-id")
     p.set_defaults(func=cmd_prompts_update)
     p = prompts.add_parser("wait", parents=[ws_parent],
