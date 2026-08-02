@@ -47,15 +47,25 @@ astria tunes list --gallery --branch partner-1   # discover every partner model
 astria tunes list --title "dress"               # find references
 astria generate --text "<faceid:123:1> woman, white studio" --num-images 4 --wait
 astria generate --model wan-2-7 --text "plain white background" \
-  --images "dress=./dress.jpg" --images "woman=./woman.jpg" --num-images 1 --wait
-astria video  --text "a model on a runway" \
-              --video-model seedance2_fast_720p --video-prompt "camera tracks her"
+  --reference "dress=./dress.jpg" --reference "woman=./woman.jpg" --num-images 1 --wait
+astria video --video-model seedance2_fast_720p \
+  --video-prompt "<faceid:1234:1> woman walks down a runway" --duration 5 --wait
+astria video --video-model seedance2_fast_720p \
+  --video-prompt "woman wearing a dress walks down a runway" \
+  --reference woman=./model.jpg --reference dress=./dress.jpg --wait
 astria prompts wait 555 556 557                  # block until each settles (images or user_error)
 astria download 555 556 --out ./shots           # download a prompt's images
 astria api GET /prompts --query limit=5          # raw API escape hatch
 ```
 
 Run `astria --help` for the full command list.
+
+Seedance 2 uses references exactly like image generation: write
+`<faceid:TUNE_ID:1> TUNE_NAME`, with the tune's class name immediately after
+the token. For a new reference, repeat `--reference NAME=PATH_OR_URL`; the CLI
+creates each reference and adds its correctly formatted mention to both the
+first-frame prompt and video prompt. `--images` remains an alias for
+`--reference`.
 
 ## Profiles
 
