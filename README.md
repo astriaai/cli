@@ -53,6 +53,9 @@ astria video --video-model seedance2_fast_720p \
 astria video --video-model seedance2_fast_720p \
   --video-prompt "woman wearing a dress walks down a runway" \
   --reference woman=./model.jpg --reference dress=./dress.jpg --wait
+astria video --video-model seedance2_fast_720p \
+  --video-prompt "transition through these looks in order" \
+  --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait
 astria prompts wait 555 556 557                  # block until each settles (images or user_error)
 astria download 555 556 --out ./shots           # download a prompt's images
 astria packs get spring-lookbook                 # inspect templates and pricing
@@ -83,6 +86,11 @@ the token. For a new reference, repeat `--reference NAME=PATH_OR_URL`; the CLI
 creates each reference and adds its correctly formatted mention to both the
 first-frame prompt and video prompt. `--images` remains an alias for
 `--reference`.
+
+For models that accept raw image references, repeat
+`--image-reference PATH_OR_URL`. These images are attached directly to the video prompt in the
+same order they appear on the command line; they do not create reference
+tunes. A request may use local files or URLs, but does not mix the two forms.
 
 ## Profiles
 
