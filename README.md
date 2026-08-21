@@ -53,12 +53,32 @@ astria video --video-model seedance2_fast_720p \
 astria video --video-model seedance2_fast_720p \
   --video-prompt "woman wearing a dress walks down a runway" \
   --reference woman=./model.jpg --reference dress=./dress.jpg --wait
+astria video --video-model seedance2_fast_720p \
+  --video-prompt "transition through these looks in order" \
+  --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait
 astria prompts wait 555 556 557                  # block until each settles (images or user_error)
 astria download 555 556 --out ./shots           # download a prompt's images
+astria packs get spring-lookbook                 # inspect templates and pricing
 astria api GET /prompts --query limit=5          # raw API escape hatch
 ```
 
 Run `astria --help` for the full command list.
+
+## Pricing
+
+Prices are returned as `cost_mc`, an integer number of **millicents**: 1,000
+millicents = 1 cent and 100,000 millicents = US $1.
+Prompt prices already include `num_images`; do not multiply by it again. Sum
+the `cost_mc` values for several prompts, then divide by 100,000 for dollars.
+
+`astria packs get SLUG` returns stored `template_prompts[].cost_mc` values that
+can be summed as a baseline for a selected subset. Its class-specific
+`costs.*.cost_mc` values include a hypothetical fresh reference plus that
+class's prompt group; on a multi-class pack this is not necessarily the entire
+pack. These are estimates from stored template settings. Caller/workspace
+rules, overrides, discounts, ecommerce pricing, and cartesian variants can
+change the result. After a run, use `order.total_cost_mc` when the response
+includes an order; it is the authoritative charged total.
 
 Seedance 2 uses references exactly like image generation: write
 `<faceid:TUNE_ID:1> TUNE_NAME`, with the tune's class name immediately after
@@ -66,6 +86,11 @@ the token. For a new reference, repeat `--reference NAME=PATH_OR_URL`; the CLI
 creates each reference and adds its correctly formatted mention to both the
 first-frame prompt and video prompt. `--images` remains an alias for
 `--reference`.
+
+For models that accept raw image references, repeat
+`--image-reference PATH_OR_URL`. These images are attached directly to the video prompt in the
+same order they appear on the command line; they do not create reference
+tunes. A request may use local files or URLs, but does not mix the two forms.
 
 ## Profiles
 

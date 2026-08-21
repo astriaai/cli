@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.12.0"
+VERSION = "1.14.0"
 
 
 def _platform_token():
@@ -493,6 +493,26 @@ def media_field(prefix, value):
     return field(prefix, f"@{value}")
 
 
+def image_reference_fields(values):
+    values = values or []
+    source_kinds = {
+        "url" if str(value).startswith(("http://", "https://")) else "file"
+        for value in values
+    }
+    if len(source_kinds) > 1:
+        die("--image-reference cannot mix URLs and local files in one request")
+
+    fields = []
+    for value in values:
+        if source_kinds == {"url"}:
+            fields.append(field("prompt[image_reference_urls][]", value))
+            continue
+        if not Path(value).is_file():
+            die(f"image reference file not found: {value}")
+        fields.append(field("prompt[image_references][]", f"@{value}"))
+    return fields
+
+
 # --------------------------------------------------------------------------
 # polling
 # --------------------------------------------------------------------------
@@ -761,7 +781,7 @@ def cmd_prompts_list(args, cfg):
         query.append(("offset", args.offset))
     path = f"/tunes/{args.tune_id}/prompts" if args.tune_id else "/prompts"
     prompts = request(cfg, "GET", path, query=query, workspace=args.workspace)
-    keys = ["id", "text", "num_images", "images", "aspect_ratio", "resolution", "pack_id", "tune_id", "order_id"]
+    keys = ["id", "text", "num_images", "cost_mc", "images", "aspect_ratio", "resolution", "pack_id", "tune_id", "order_id"]
     if args.expand:
         keys += ["debug_images", "debug_filenames", "debug_content_types"]
     emit([{k: p.get(k) for k in keys} for p in prompts])
@@ -912,6 +932,7 @@ def _generate(args, cfg, video):
         form.append(field("prompt[video_model]", args.video_model))
         form.append(field("prompt[video_prompt]",
                           prepend_reference_mentions(args.video_prompt, reference_mentions)))
+        form.extend(image_reference_fields(args.image_references))
         if args.duration:
             form.append(field("prompt[video_duration]", args.duration))
         for opt, prefix in (("first_frame", "prompt[video_first_frame]"),
@@ -943,7 +964,7 @@ def cmd_generate(args, cfg):
 
 def cmd_video(args, cfg):
     if getattr(args, "input_image", None):
-        die("--input-image is for image generation/editing. For video, use --first-frame, --last-frame, --input-video, or --reference NAME=PATH_OR_URL.")
+        die("--input-image is for image generation/editing. For video, use --first-frame, --last-frame, --input-video, --image-reference, or --reference NAME=PATH_OR_URL.")
     _generate(args, cfg, video=True)
 
 
@@ -957,7 +978,12 @@ def cmd_packs_list(args, cfg):
     if args.offset:
         query.append(("offset", args.offset))
     packs = request(cfg, "GET", "/packs", query=query, workspace=args.workspace)
-    emit([{k: p.get(k) for k in ("id", "title", "slug", "subtitle", "main_class_name")} for p in packs])
+    keys = ("id", "title", "slug", "subtitle", "main_class_name", "costs")
+    emit([{k: p.get(k) for k in keys} for p in packs])
+
+
+def cmd_packs_get(args, cfg):
+    emit(request(cfg, "GET", f"/p/{args.slug}.json", workspace=args.workspace))
 
 
 def cmd_packs_create(args, cfg):
@@ -1647,7 +1673,11 @@ def build_parser():
             "  astria video --video-model seedance2_fast_480p \\\n"
             "    --video-prompt \"woman wearing dress, plain white background\" \\\n"
             "    --reference \"dress=./dress.jpg\" --reference \"woman=./woman.jpg\" \\\n"
-            "    --num-images 1 --wait"
+            "    --num-images 1 --wait\n\n"
+            "  # Attach ordered raw image references without creating tunes\n"
+            "  astria video --video-model seedance2_fast_720p \\\n"
+            "    --video-prompt \"transition through these looks in order\" \\\n"
+            "    --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait"
         ),
     )
     p.add_argument("--model", default=None, help=image_model_help(models_record, "first-frame image model"))
@@ -1663,6 +1693,10 @@ def build_parser():
     p.add_argument("--input-image", help=argparse.SUPPRESS)
     p.add_argument("--reference", "--images", dest="references", action="append", metavar="NAME=PATH_OR_URL",
                    help="create and attach a reference; repeat for each NAME=PATH_OR_URL (--images is an alias)")
+    p.add_argument("--image-reference", dest="image_references", action="append", metavar="PATH_OR_URL",
+                   help=video_capability_help(
+                       models_record, "supports_image_references",
+                       "attach an ordered raw image reference; repeat for each image"))
     p.add_argument("--first-frame", help="URL or file overriding the rendered first frame")
     p.add_argument("--last-frame", help="URL or file for keyframe models")
     p.add_argument("--input-video", help="URL or file for motion-control models")
@@ -1690,6 +1724,9 @@ def build_parser():
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_packs_list)
+    p = packs.add_parser("get", parents=[ws_parent], help="get a pack and its template prompts")
+    p.add_argument("slug", help="pack slug or id")
+    p.set_defaults(func=cmd_packs_get)
     p = packs.add_parser("create", parents=[ws_parent], help="create a pack")
     p.add_argument("--title", required=True)
     p.add_argument("--subtitle")
