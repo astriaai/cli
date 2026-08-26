@@ -46,6 +46,7 @@ astria models                                   # popular models -> tune ids
 astria tunes list --gallery --branch partner-1   # discover every partner model
 astria tunes list --title "dress"               # find references
 astria generate --text "<faceid:123:1> woman, white studio" --num-images 4 --wait
+astria generate --text "cinematic portrait" --film-grain --wait
 astria generate --model wan-2-7 --text "plain white background" \
   --reference "dress=./dress.jpg" --reference "woman=./woman.jpg" --num-images 1 --wait
 astria video --video-model seedance2_fast_720p \
