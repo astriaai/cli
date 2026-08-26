@@ -57,6 +57,8 @@ astria video --video-model seedance2_fast_720p \
 astria video --video-model seedance2_fast_720p \
   --video-prompt "transition through these looks in order" \
   --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait
+astria inspect-video ./clip.mp4                   # timestamped text-to-video description
+astria inspect-video https://example.com/clip.mp4 --tune-id 123
 astria prompts wait 555 556 557                  # block until each settles (images or user_error)
 astria download 555 556 --out ./shots           # download a prompt's images
 astria packs get spring-lookbook                 # inspect templates and pricing
