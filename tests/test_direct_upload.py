@@ -317,6 +317,47 @@ class DirectUploadTest(unittest.TestCase):
             "file_url": "https://example.com/clip.mp4",
         })
 
+    def test_inspect_video_polls_until_the_inspection_settles(self):
+        args = SimpleNamespace(source="https://example.com/clip.mp4", tune_id=None, workspace=None)
+        calls = []
+
+        def request(_cfg, method, path, **kwargs):
+            calls.append((method, path))
+            if method == "POST":
+                return {"id": "abc123", "status": "pending"}
+            if len(calls) < 3:
+                return {"id": "abc123", "status": "processing"}
+            return {"id": "abc123", "status": "completed", "description": "00-05 - shot"}
+
+        with patch.dict(CLI["cmd_inspect_video"].__globals__, {
+            "direct_upload": Mock(),
+            "request": request,
+            "time": SimpleNamespace(monotonic=lambda: 0.0, sleep=lambda _s: None),
+        }):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                CLI["cmd_inspect_video"](args, {})
+
+        self.assertEqual(calls, [
+            ("POST", "/videos/inspect"),
+            ("GET", "/videos/inspect/abc123"),
+            ("GET", "/videos/inspect/abc123"),
+        ])
+        self.assertEqual(__import__("json").loads(output.getvalue())["status"], "completed")
+
+    def test_inspect_video_reports_a_failed_inspection(self):
+        args = SimpleNamespace(source="https://example.com/clip.mp4", tune_id=None, workspace=None)
+        request = Mock(return_value={"id": "abc123", "status": "failed", "error": "Video is too large to inspect"})
+
+        with patch.dict(CLI["cmd_inspect_video"].__globals__, {
+            "direct_upload": Mock(),
+            "request": request,
+        }):
+            with self.assertRaises(CLI["AstriaError"]) as raised:
+                CLI["cmd_inspect_video"](args, {})
+
+        self.assertIn("Video is too large to inspect", str(raised.exception))
+
     def test_parser_exposes_inspect_video_without_a_custom_prompt(self):
         args = CLI["build_parser"]().parse_args([
             "inspect-video", "clip.mp4", "--tune-id", "12",
