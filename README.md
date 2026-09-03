@@ -69,6 +69,10 @@ astria api GET /prompts --query limit=5          # raw API escape hatch
 
 Run `astria --help` for the full command list.
 
+`astria help` is an alias for `astria --help`; pass a command for focused help,
+such as `astria help variate`. Version output is available through
+`astria --version`, `astria -v`, or `astria version`.
+
 ## Uploads
 
 Local files are uploaded directly to Astria's object storage before the tune,
