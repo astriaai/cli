@@ -59,6 +59,8 @@ astria video --video-model seedance2_fast_720p \
   --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait
 astria inspect-video ./clip.mp4                   # timestamped text-to-video description
 astria inspect-video https://example.com/clip.mp4 --tune-id 123
+astria variate ./clip.mp4 --brief 'Replace the end card with Astria' --wait
+astria variate ./clip.mp4 --reference ./dress.jpg --reference woman=./model.jpg --wait
 astria prompts wait 555 556 557                  # block until each settles (images or user_error)
 astria download 555 556 --out ./shots           # download a prompt's images
 astria packs get spring-lookbook                 # inspect templates and pricing
@@ -66,6 +68,17 @@ astria api GET /prompts --query limit=5          # raw API escape hatch
 ```
 
 Run `astria --help` for the full command list.
+
+## Uploads
+
+Local files are uploaded directly to Astria's object storage before the tune,
+prompt, pack, or raw API request is submitted. A command with several local
+files uploads up to six of them in parallel while preserving their argument
+order in the final request. Remote URLs are passed through unchanged.
+
+The raw API escape hatch uses the same flow: `--form 'key=@./file.jpg'`
+direct-uploads the file and sends its signed blob id under `key`; it does not
+proxy the file through the Astria API server.
 
 ## Pricing
 
@@ -94,6 +107,44 @@ For models that accept raw image references, repeat
 `--image-reference PATH_OR_URL`. These images are attached directly to the video prompt in the
 same order they appear on the command line; they do not create reference
 tunes. A request may use local files or URLs, but does not mix the two forms.
+
+## Variate a video
+
+`astria variate` carries the Variate mini-app flow into one command: it
+inspects a driving video, turns an edit brief and replacement references into
+a production-ready Seedance 2.5 video-to-video prompt, then creates the video.
+
+```bash
+# Brief-only edit
+astria variate ./source.mp4 \
+  --brief 'Change the text on the final card to say "Astria"' --wait
+
+# Existing and newly-created replacement references
+astria variate ./source.mp4 \
+  --tune-id 123 \
+  --reference ./dress.jpg \
+  --reference woman=https://example.com/model.jpg \
+  --brief 'Keep the performance and replace the presenter and wardrobe' --wait
+
+# Skip paid video inspection when a description is already available
+astria variate https://example.com/source.mp4 \
+  --description-file ./source-description.txt \
+  --brief 'Use a warmer end-card treatment'
+```
+
+- `SOURCE` accepts a local MP4/MOV or a public HTTPS URL. Local source and
+  reference files are direct-uploaded together, in parallel, before API work.
+- `--reference [NAME=]PATH_OR_URL` creates one replacement tune per image.
+  Omit `NAME=` to auto-detect the class; use it to skip class detection.
+- `--tune-id ID` reuses an existing replacement tune. Existing tune ids are
+  composed before newly-created references, and each group keeps flag order.
+- Either a non-empty `--brief` or at least one reference is required.
+- `--description` and `--description-file` bypass source-video inspection.
+- Variate intentionally fixes `video_model=seedance25_720p` and audio on, and
+  leaves duration and aspect ratio unset so they follow the source video.
+- Output is structured JSON containing `description`, `references`,
+  `video_prompt`, and `prompt`. `--wait` replaces `prompt` with its settled
+  generation record.
 
 ## Profiles
 

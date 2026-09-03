@@ -5,7 +5,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 CLI = runpy.run_path(Path(__file__).parents[1] / "astria", run_name="astria_test")
@@ -45,7 +45,11 @@ class ImageReferencesTest(unittest.TestCase):
             captured["form"] = form
             return {"id": 9}
 
-        with patch.dict(CLI["_generate"].__globals__, {"request": request}):
+        upload = Mock(side_effect=lambda _cfg, paths: [f"signed-{Path(path).stem}" for path in paths])
+        with patch.dict(CLI["_generate"].__globals__, {
+            "direct_uploads": upload,
+            "request": request,
+        }):
             with redirect_stdout(io.StringIO()):
                 CLI["_generate"](args, {}, video=True)
         return captured["form"]
@@ -74,7 +78,7 @@ class ImageReferencesTest(unittest.TestCase):
 
         references = [value for key, value in form if key == "prompt[image_references][]"]
 
-        self.assertEqual(references, [f"@{first}", f"@{second}"])
+        self.assertEqual(references, ["signed-look-1", "signed-look-2"])
 
     def test_rejects_mixed_url_and_local_file_references(self):
         with tempfile.TemporaryDirectory() as directory:
