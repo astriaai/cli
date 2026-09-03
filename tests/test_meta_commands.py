@@ -44,7 +44,7 @@ class MetaCommandsTest(unittest.TestCase):
         self.assertEqual(short.returncode, 0)
         self.assertEqual(long.returncode, 0)
         self.assertEqual(command.returncode, 0)
-        self.assertEqual(short.stdout, "astria 1.18.1\n")
+        self.assertEqual(short.stdout, "astria 1.19.0\n")
         self.assertEqual(short.stdout, long.stdout)
         self.assertEqual(command.stdout, long.stdout)
 
@@ -53,6 +53,14 @@ class MetaCommandsTest(unittest.TestCase):
 
         self.assertEqual(command.returncode, 0)
         self.assertIn("usage: astria variate", command.stdout)
+
+    def test_handoff_is_discoverable_from_help(self):
+        top_level = self.run_cli("--help")
+        handoff = self.run_cli("agent", "handoff", "--help")
+
+        self.assertIn("agent               Astria embedded agent", top_level.stdout)
+        self.assertIn("usage: astria agent handoff", handoff.stdout)
+        self.assertIn("--skill DIR", handoff.stdout)
 
 
 if __name__ == "__main__":
