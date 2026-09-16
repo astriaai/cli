@@ -1,4 +1,5 @@
 import io
+import json
 import runpy
 import tempfile
 import threading
@@ -357,6 +358,60 @@ class DirectUploadTest(unittest.TestCase):
                 CLI["cmd_inspect_video"](args, {})
 
         self.assertIn("Video is too large to inspect", str(raised.exception))
+
+    def test_inspect_direct_uploads_a_local_file_and_passes_reference_names(self):
+        args = SimpleNamespace(source="look.jpg", name=["dress", "shoes"], workspace="9")
+        captured = {}
+
+        def request(_cfg, method, path, **kwargs):
+            captured.update(method=method, path=path, **kwargs)
+            return {"description": "Composition: a model in a studio."}
+
+        with patch.dict(CLI["cmd_inspect"].__globals__, {
+            "direct_upload_records": lambda _cfg, _paths: [{"public_url": "https://cdn.test/look.jpg"}],
+            "request": request,
+        }):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                CLI["cmd_inspect"](args, {})
+
+        self.assertEqual(captured["path"], "/images/describe")
+        self.assertNotIn("json_body", captured)
+        self.assertEqual(captured["form"], [
+            ("file_url", "https://cdn.test/look.jpg"),
+            ("names[]", "dress"),
+            ("names[]", "shoes"),
+        ])
+        self.assertEqual(captured["timeout"], 125)
+        self.assertEqual(
+            json.loads(output.getvalue())["description"],
+            "Composition: a model in a studio.",
+        )
+
+    def test_inspect_passes_an_https_url_without_uploading(self):
+        args = SimpleNamespace(source="https://example.com/look.jpg", name=None, workspace=None)
+        request = Mock(return_value={"description": "Composition: a model in a studio."})
+        upload = Mock()
+
+        with patch.dict(CLI["cmd_inspect"].__globals__, {
+            "direct_upload_records": upload,
+            "request": request,
+        }):
+            with redirect_stdout(io.StringIO()):
+                CLI["cmd_inspect"](args, {})
+
+        upload.assert_not_called()
+        self.assertEqual(request.call_args.kwargs["form"], [
+            ("file_url", "https://example.com/look.jpg"),
+        ])
+
+    def test_parser_exposes_inspect(self):
+        args = CLI["build_parser"]().parse_args([
+            "inspect", "look.jpg", "--name", "dress",
+        ])
+
+        self.assertEqual(args.source, "look.jpg")
+        self.assertEqual(args.name, ["dress"])
 
     def test_parser_exposes_inspect_video_without_a_custom_prompt(self):
         args = CLI["build_parser"]().parse_args([

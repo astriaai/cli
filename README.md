@@ -59,6 +59,8 @@ astria video --video-model seedance2_fast_720p \
   --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait
 astria inspect-video ./clip.mp4                   # timestamped text-to-video description
 astria inspect-video https://example.com/clip.mp4 --tune-id 123
+astria inspect ./image.jpg                        # image-generation prompt description
+astria inspect https://example.com/image.jpg --name dress
 astria variate ./clip.mp4 --brief 'Replace the end card with Astria' --wait
 astria variate ./clip.mp4 --reference ./dress.jpg --reference woman=./model.jpg --wait
 astria prompts wait 555 556 557                  # block until each settles (images or user_error)
