@@ -33,7 +33,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.19.0"
+VERSION = "1.19.1"
 
 
 def _platform_token():

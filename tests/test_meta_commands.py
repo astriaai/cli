@@ -44,7 +44,7 @@ class MetaCommandsTest(unittest.TestCase):
         self.assertEqual(short.returncode, 0)
         self.assertEqual(long.returncode, 0)
         self.assertEqual(command.returncode, 0)
-        self.assertEqual(short.stdout, "astria 1.19.0\n")
+        self.assertEqual(short.stdout, "astria 1.19.1\n")
         self.assertEqual(short.stdout, long.stdout)
         self.assertEqual(command.stdout, long.stdout)
 
