@@ -75,6 +75,24 @@ Run `astria --help` for the full command list.
 such as `astria help variate`. Version output is available through
 `astria --version`, `astria -v`, or `astria version`.
 
+## Image review comments
+
+```bash
+astria prompts list -w 42 --expand prompt.comments
+astria prompts get 555 -w 42 --tune 123 --expand prompt.comments
+astria api GET /prompts/555 --query 'expand[]=prompt.comments' -w 42
+```
+
+`--expand comments` is an alias. Repeat `--expand` to combine comments with
+other expansions, such as `--expand prompt.debug_images`.
+
+Expanded prompts include a `comments` array, ordered oldest first, with comment
+text (`body`), author, timestamps, and resolution status (`resolved_at`,
+`resolved_by`). Each comment identifies its image with `image_review_id`,
+`attachment_id`, `blob_id`, `image_url`, and `filename`. Only available images in
+workspaces you belong to are included; resolved comments are retained. Prompts
+without comments return an empty array. Comments are omitted without expansion.
+
 ## Uploads
 
 Local files are uploaded directly to Astria's object storage before the tune,
