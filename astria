@@ -2254,7 +2254,7 @@ def build_parser(models_record=None):
 
     # tunes
     tunes = sub.add_parser("tunes", help="references / fine-tuned models").add_subparsers(dest="sub", required=True)
-    p = tunes.add_parser("list", parents=[ws_parent], help="list tunes")
+    p = tunes.add_parser("list", parents=[ws_parent], help="List image reference sets and trained models accessible to your Astria account")
     p.add_argument("--title", help="filter by title / product name / SKU substring")
     p.add_argument("--name", action="append", help="filter by class name (repeatable)")
     p.add_argument("--model-type", help="filter by model_type (e.g. faceid)")
@@ -2263,7 +2263,7 @@ def build_parser(models_record=None):
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_tunes_list)
-    p = tunes.add_parser("get", parents=[ws_parent], help="get one tune")
+    p = tunes.add_parser("get", parents=[ws_parent], help="Get an Astria image reference set or trained model by ID, including details and image URLs")
     p.add_argument("id")
     p.set_defaults(func=cmd_tunes_get)
     p = tunes.add_parser("create", parents=[ws_parent], help="create a tune / reference")
@@ -2461,7 +2461,7 @@ def build_parser(models_record=None):
 
     # packs
     packs = sub.add_parser("packs", help="prompt-template collections").add_subparsers(dest="sub", required=True)
-    p = packs.add_parser("list", parents=[ws_parent], help="list packs")
+    p = packs.add_parser("list", parents=[ws_parent], help="List reusable Astria photoshoot templates with their IDs and titles")
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_packs_list)
