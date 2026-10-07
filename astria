@@ -34,7 +34,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.19.1"
+VERSION = "1.19.2"
 
 
 def _platform_token():
@@ -88,6 +88,43 @@ MODEL_ENV = {
     "gpt-image-2": "GPT_IMAGE_2_TUNE_ID",
 }
 MODELS_TTL_DEFAULT = 86400
+
+# Prompt-list parameter metadata is shared by CLI flags, wire mappings and MCP.
+# Rails specs check this exported contract against the actual filter handlers.
+PROMPT_FILTERS = {
+    "text": {"mode": "truthy", "help": "filter by prompt text substring"},
+    "text_ne": {"mode": "array", "help": "exclude a text substring (repeatable)"},
+    "t": {"mode": "truthy", "help": "filter by prompt theme"},
+    "pack_id": {"mode": "truthy", "help": "template prompts owned by a pack"},
+    "base_pack_id": {"mode": "truthy", "help": "prompts generated from a pack"},
+    "tune_id": {"mode": "truthy", "help": "filter by checkpoint or reference tune"},
+    "tune_id_ne": {"mode": "truthy", "help": "exclude a checkpoint or reference tune"},
+    "name": {"mode": "truthy", "help": "filter by tune subject class"},
+    "branch": {"mode": "truthy", "help": "filter by tune branch"},
+    "controlnet": {"mode": "truthy", "help": "filter by ControlNet type; other values select any ControlNet"},
+    "user_id": {"mode": "truthy", "help": "filter by creator within the authorized workspace scope"},
+    "user_id_ne": {"mode": "truthy", "help": "exclude a creator within the authorized workspace scope"},
+    "payer_id": {"mode": "truthy", "help": "filter by payer within the authorized workspace scope"},
+    "affiliate_id": {"mode": "truthy", "help": "filter by affiliate within the authorized workspace scope"},
+    "orig_prompt_id": {"mode": "truthy", "help": "prompts cloned from this prompt id"},
+    "order_id": {"mode": "truthy", "help": "prompts generated for one order"},
+    "review": {"mode": "truthy", "choices": ["pending", "ready", "comments", "synced"],
+               "help": "filter by image review status; comments includes resolved comments"},
+    "liked": {"mode": "flag", "help": "only prompts that have likes"},
+    "today": {"mode": "flag", "help": "only prompts created today"},
+    "archived": {"mode": "flag", "help": "only archived prompts; omitted selects unarchived prompts"},
+    "is_multiperson": {"mode": "boolean", "help": "filter by multiperson status"},
+    "is_video": {"mode": "boolean", "help": "filter by video status"},
+    "is_api": {"mode": "boolean", "help": "filter by API source"},
+    "is_input_video": {"mode": "boolean", "help": "filter by input video presence"},
+    "has_input_image": {"mode": "boolean", "help": "filter by input image presence"},
+    "user_error": {"mode": "boolean", "help": "filter by user-visible error presence"},
+    "inpaint_faces": {"mode": "boolean", "help": "filter by face inpainting status"},
+    "limit": {"mode": "truthy", "help": "maximum number of prompts, capped at 120"},
+    "offset": {"mode": "truthy", "help": "pagination offset, capped at 10000; use before_id for deeper pages"},
+    "before_id": {"mode": "truthy", "help": "keyset cursor: return prompts older than this id"},
+}
+
 
 # Shared request contract. Rails consumes the JSON export of these definitions;
 # CLI-only uploads, caching and waiting remain in the terminal handlers.
@@ -193,20 +230,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                     'generate': 2}},
  'list_prompts': {'method': 'GET',
                   'path': '/prompts',
-                  'fields': [['text', 'text', 'truthy'],
-                             ['pack_id', 'pack_id', 'truthy'],
-                             ['base_pack_id', 'base_pack_id', 'truthy'],
-                             ['tune_id', 'tune_id', 'truthy'],
-                             ['user_id', 'user_id', 'truthy'],
-                             ['orig_prompt_id', 'orig_prompt_id', 'truthy'],
-                             ['order_id', 'order_id', 'truthy'],
-                             ['expand[]', 'expand', 'array'],
-                             ['liked', 'liked', 'flag'],
-                             ['today', 'today', 'flag'],
-                             ['is_video', 'is_video', 'flag'],
-                             ['is_api', 'is_api', 'flag'],
-                             ['limit', 'limit', 'truthy'],
-                             ['offset', 'offset', 'truthy']],
+                  'fields': [[name + ('[]' if spec['mode'] == 'array' else ''), name, spec['mode']]
+                             for name, spec in PROMPT_FILTERS.items()] + [['expand[]', 'expand', 'array']],
                   'target': 'query',
                   'result': {'pick': ['id',
                                       'text',
@@ -2285,21 +2310,19 @@ def build_parser(models_record=None):
     # prompts
     prompts = sub.add_parser("prompts", help="image/video generation records").add_subparsers(dest="sub", required=True)
     p = prompts.add_parser("list", parents=[ws_parent], help="list prompts")
-    p.add_argument("--tune-id", help="scope to one tune's prompts")
-    p.add_argument("--pack-id", help="template prompts owned by a pack")
-    p.add_argument("--base-pack-id", help="prompts generated from a pack")
-    p.add_argument("--order-id", help="prompts generated for one order")
-    p.add_argument("--user-id")
-    p.add_argument("--orig-prompt-id", help="prompts cloned from this prompt id")
-    p.add_argument("--text", help="filter by prompt text substring")
-    p.add_argument("--liked", action="store_true", help="only prompts that have likes")
-    p.add_argument("--today", action="store_true", help="only prompts created today")
-    p.add_argument("--is-video", action="store_true", help="only video prompts")
-    p.add_argument("--is-api", action="store_true", help="only prompts created via the API")
+    for name, spec in PROMPT_FILTERS.items():
+        options = {"help": spec["help"]}
+        if "choices" in spec:
+            options["choices"] = spec["choices"]
+        if spec["mode"] == "flag":
+            options["action"] = "store_true"
+        elif spec["mode"] == "boolean":
+            options.update(action=argparse.BooleanOptionalAction, default=None)
+        elif spec["mode"] == "array":
+            options["action"] = "append"
+        p.add_argument("--" + name.replace("_", "-"), **options)
     p.add_argument("--expand", action="append", choices=["debug_images", "prompt.debug_images", "comments", "prompt.comments"],
                    help="expand a prompt field, e.g. debug_images (repeatable)")
-    p.add_argument("--limit")
-    p.add_argument("--offset")
     p.set_defaults(func=cmd_prompts_list)
     p = prompts.add_parser("get", parents=[ws_parent], help="get one prompt")
     p.add_argument("id")
@@ -2609,7 +2632,7 @@ OPERATION_POLICIES = {
     "create_reference": (("tunes", "create"), False, {"image"}),
     "generate_images": (("generate",), False, {"wait", "video_prompt"}),
     "generate_video": (("video",), False, {"wait", "input_image"}),
-    "list_prompts": (("prompts", "list"), True, {"user_id"}),
+    "list_prompts": (("prompts", "list"), True, set()),
     "get_prompt": (("prompts", "get"), True, set()),
     "list_templates": (("packs", "list"), True, set()),
     "get_template": (("packs", "get"), True, set()),
@@ -2623,7 +2646,7 @@ OPERATION_DESCRIPTIONS = {
     'create_reference': 'Use this when a supplied person or product needs one reusable Astria reference for consistent headshots, virtual try-on, product shots, or multiple scenes. Provide real HTTPS photo URLs, a subject class in name, and a human label in title. Reuse an existing reference when available. Creates paid content only within the requested generation/reference scope; requires an idempotency_key. Returns the new reference ID and class; reuse them across generations. Does not return a finished photoshoot.',
     'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
     'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_model and video_prompt; use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Discover current capabilities with list_models. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
-    'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, or video status. Does not generate or charge credits. Results include prompt IDs and tune IDs for get_prompt; expand prompt.comments to inspect review feedback.',
+    'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs and tune IDs for get_prompt; expand prompt.comments to inspect review feedback.',
     'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass both its returned id and tune_id (as tune). Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
     'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
     'get_template': 'Use this when resolving a selected Astria photoshoot template by slug or ID before running it or inspecting its prompts, reference slots, and baseline pricing. Does not generate images or modify the template. Preserve the returned reference-slot order when calling run_template.',
@@ -2729,7 +2752,7 @@ def operation_contract():
             "defaults": {**{spec[1]: None for spec in definition["fields"]},
                          **{action.dest: action.default for action in actions}},
             "integer_arguments": [action.dest for action in actions if action.type is int]}
-    return {"version": 1, "operations": operations,
+    return {"version": 1, "operations": operations, "prompt_filters": PROMPT_FILTERS,
             "remote_media_arguments": sorted(REMOTE_MEDIA_ARGUMENTS),
             "fallback_models": MODEL_TUNES, "fallback_default": "gemini"}
 
