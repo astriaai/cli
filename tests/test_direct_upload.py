@@ -216,7 +216,7 @@ class DirectUploadTest(unittest.TestCase):
             upload = Mock(return_value=["signed-first", "signed-second"])
             request = Mock(return_value={"id": 7})
             args = SimpleNamespace(
-                slug="lookbook", tune_id=None, title="Look", name="dress",
+                slug="lookbook", tune_id=None, tune_replacements=None, title="Look", name="dress",
                 image=[str(first), str(second)], image_url=None, brief=None,
                 prompt_ids=None, num_images=None, aspect_ratio=None, resolution=None,
                 inpaint_faces=None, attr=None, workspace=None,
