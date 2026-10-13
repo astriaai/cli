@@ -34,7 +34,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.19.3"
+VERSION = "1.20.0"
 
 
 def _platform_token():
@@ -136,7 +136,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                        'model_selection_guidance': ['model_selection_guidance', None],
                                        'default_video_model': ['default_video_model', None],
                                        'models': ['models', {}],
-                                       'video_models': ['video_models', {}]},
+                                       'video_models': ['video_models', {}],
+                                       'video_model_families': ['video_model_families', {}]},
                             'constants': {'note': 'this is the curated set of popular models only — any '
                                                   '--model also accepts a raw tune id directly. Browse every '
                                                   'partner model and its tune id at '
@@ -210,6 +211,7 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                ['prompt[pack_id]', 'pack_id', 'truthy'],
                                ['prompt[base_pack_id]', 'base_pack_id', 'truthy'],
                                ['prompt[video_model]', 'video_model', 'truthy'],
+                               ['prompt[video_resolution]', 'video_resolution', 'truthy'],
                                ['prompt[video_prompt]', 'video_prompt', 'value'],
                                ['prompt[image_references][]', 'image_references', 'media_array', 'prompt[image_reference_urls][]'],
                                ['prompt[video_duration]', 'duration', 'truthy'],
@@ -617,6 +619,7 @@ def fetch_models(cfg):
         "default_video_model": payload.get("default_video_model"),
         "models": payload["models"],
         "video_models": payload.get("video_models") or {},
+        "video_model_families": payload.get("video_model_families") or {},
         "cli": payload.get("cli") or {},
         "skills": payload.get("skills") or {},
     }
@@ -2305,17 +2308,23 @@ def resolution_help(rec, noun="output resolution"):
 
 
 def video_model_help(rec):
-    video_models = rec.get("video_models") or {}
-    if not video_models:
-        return "video model name; see 'astria models' for the list"
-    default = rec.get("default_video_model")
-    names = ", ".join(f"{name} (default)" if name == default else name
-                      for name in video_models)
-    return "video model — " + names
+    families = rec.get("video_model_families") or {}
+    if not families:
+        return ("video model family, e.g. seedance25 (pick its resolution with --video-resolution); "
+                "see 'astria models' for the list")
+    return ("video model family (pick its resolution with --video-resolution; variant ids such as "
+            "seedance25_720p also work) — " + ", ".join(families))
+
+
+def video_resolution_help(rec):
+    families = rec.get("video_model_families") or {}
+    listed = [f"{name}: {'/'.join(meta['resolutions'])}" for name, meta in families.items() if meta.get("resolutions")]
+    base = "output resolution for --video-model, e.g. 720p; omit for the family default"
+    return f"{base} — {'; '.join(listed)}" if listed else f"{base}; see 'astria models' for each family's set"
 
 
 def video_capability_help(rec, flag, base):
-    models = [name for name, meta in (rec.get("video_models") or {}).items()
+    models = [name for name, meta in (rec.get("video_model_families") or {}).items()
               if meta.get(flag)]
     if not models:
         return base
@@ -2476,15 +2485,15 @@ def build_parser(models_record=None):
             "the correctly formatted mention to --text and --video-prompt automatically.\n\n"
             "examples:\n"
             "  # Existing reference tune\n"
-            "  astria video --video-model seedance2_fast_720p \\\n"
+            "  astria video --video-model seedance2_fast --video-resolution 720p \\\n"
             "    --video-prompt \"<faceid:1234:1> woman walks down a runway\" --duration 5 --wait\n\n"
             "  # Create and use references from local files or URLs\n"
-            "  astria video --video-model seedance2_fast_480p \\\n"
+            "  astria video --video-model seedance2_fast --video-resolution 480p \\\n"
             "    --video-prompt \"woman wearing dress, plain white background\" \\\n"
             "    --reference \"dress=./dress.jpg\" --reference \"woman=./woman.jpg\" \\\n"
             "    --num-images 1 --wait\n\n"
             "  # Attach ordered raw image references without creating tunes\n"
-            "  astria video --video-model seedance2_fast_720p \\\n"
+            "  astria video --video-model seedance2_fast --video-resolution 720p \\\n"
             "    --video-prompt \"transition through these looks in order\" \\\n"
             "    --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait"
         ),
@@ -2492,12 +2501,13 @@ def build_parser(models_record=None):
     p.add_argument("--model", default=None, help=image_model_help(models_record, "first-frame image model"))
     p.add_argument("--text", help="first-frame prompt text")
     p.add_argument("--video-model", required=True, help=video_model_help(models_record))
+    p.add_argument("--video-resolution", help=video_resolution_help(models_record))
     p.add_argument("--video-prompt", required=True,
                    help="motion / action description; references use <faceid:TUNE_ID:1> TUNE_NAME")
     p.add_argument("--duration", help="seconds (model-dependent)")
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(
-        models_record, "first-frame image resolution (video resolution is set by --video-model)"))
+        models_record, "first-frame image resolution (video resolution is set by --video-resolution)"))
     p.add_argument("--num-images", help="override config default_num_images; otherwise 2")
     p.add_argument("--input-image", help=argparse.SUPPRESS)
     p.add_argument("--reference", "--images", dest="references", action="append", metavar="NAME=PATH_OR_URL",
@@ -2515,7 +2525,7 @@ def build_parser(models_record=None):
     p.add_argument("--generate-audio", action=argparse.BooleanOptionalAction, default=None,
                    help=video_capability_help(
                        models_record, "generates_audio",
-                       "generate a soundtrack; omit to use the model default"))
+                       "generate a soundtrack (picks the audio version of families that price it separately); omit for silent"))
     p.add_argument("--wait", action="store_true")
     p.set_defaults(func=cmd_video)
 
@@ -2797,7 +2807,7 @@ OPERATION_DESCRIPTIONS = {
     'get_reference': 'Use this when inspecting a selected Astria identity or product reference and its training images before a photoshoot or try-on. Returns the saved subject class and reference details. A reference token uses <model_type:ID:1> followed by that class. Does not create or alter the reference.',
     'create_reference': 'Use this when a supplied person or product needs one reusable Astria reference for consistent headshots, virtual try-on, product shots, or multiple scenes. Provide real HTTPS photo URLs, a subject class in name, and a human label in title. Reuse an existing reference when available. Creates paid content only within the requested generation/reference scope; requires an idempotency_key. Returns the new reference ID and class; reuse them across generations. Does not return a finished photoshoot.',
     'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
-    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_model and video_prompt; use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Discover current capabilities with list_models. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
+    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_model (a family from list_models video_model_families), an optional video_resolution from that family, and video_prompt; generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Discover current capabilities with list_models. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
     'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs and tune IDs for get_prompt; expand prompt.comments to inspect review feedback.',
     'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass both its returned id and tune_id (as tune). Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
     'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',

@@ -49,12 +49,12 @@ astria generate --text "<faceid:123:1> woman, white studio" --num-images 4 --wai
 astria generate --text "cinematic portrait" --film-grain --wait
 astria generate --model wan-2-7 --text "plain white background" \
   --reference "dress=./dress.jpg" --reference "woman=./woman.jpg" --num-images 1 --wait
-astria video --video-model seedance2_fast_720p \
+astria video --video-model seedance2_fast --video-resolution 720p \
   --video-prompt "<faceid:1234:1> woman walks down a runway" --duration 5 --wait
-astria video --video-model seedance2_fast_720p \
+astria video --video-model seedance2_fast --video-resolution 720p \
   --video-prompt "woman wearing a dress walks down a runway" \
   --reference woman=./model.jpg --reference dress=./dress.jpg --wait
-astria video --video-model seedance2_fast_720p \
+astria video --video-model seedance2_fast --video-resolution 720p \
   --video-prompt "transition through these looks in order" \
   --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait
 astria inspect-video ./clip.mp4                   # timestamped text-to-video description

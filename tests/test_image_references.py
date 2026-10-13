@@ -26,6 +26,7 @@ class ImageReferencesTest(unittest.TestCase):
             pack_id=None,
             base_pack_id=None,
             video_model="seedance2_fast_720p",
+            video_resolution=None,
             video_prompt="transition through these looks in order",
             duration="5",
             image_references=image_references,
