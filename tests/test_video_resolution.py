@@ -41,6 +41,14 @@ class VideoResolutionTest(unittest.TestCase):
         self.assertEqual(form["prompt[video_model]"], "seedance25")
         self.assertEqual(form["prompt[video_resolution]"], "1080p")
 
+    def test_video_parser_accepts_seed_and_sends_it(self):
+        # a 480p draft and its 1080p final share one seed; `astria video` must accept --seed (1.20.1 refused it)
+        parser = CLI["build_parser"]({}) if "build_parser" in CLI else None
+        if parser is not None:
+            ns = parser.parse_args(["video", "--video-model", "seedance25", "--video-prompt", "x", "--seed", "42"])
+            self.assertEqual(ns.seed, "42")
+        self.assertEqual(self.submitted_form(seed="42")["prompt[seed]"], "42")
+
     def test_omits_resolution_for_the_family_default(self):
         self.assertNotIn("prompt[video_resolution]", self.submitted_form(video_resolution=None))
 

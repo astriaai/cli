@@ -2510,6 +2510,7 @@ def build_parser(models_record=None):
     p.add_argument("--video-prompt", required=True,
                    help="motion / action description; references use <faceid:TUNE_ID:1> TUNE_NAME")
     p.add_argument("--duration", help="seconds (model-dependent)")
+    p.add_argument("--seed", help="generation seed; reuse a draft's seed to reproduce it at a higher resolution")
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(
         models_record, "first-frame image resolution (video resolution is set by --video-resolution)"))
