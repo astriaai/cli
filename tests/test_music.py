@@ -105,7 +105,8 @@ class MusicOperationTest(unittest.TestCase):
     def test_cache_without_music_models_is_refetched(self):
         record = {"models": {"x": {}}, "base_url": CLI["base_url"]({}), "fetched_at": int(time.time())}
         self.assertTrue(CLI["models_cache_stale"](record, {}))
-        self.assertFalse(CLI["models_cache_stale"](record | {"music_models": {}}, {}))
+        self.assertTrue(CLI["models_cache_stale"](record | {"music_models": {}}, {}))
+        self.assertFalse(CLI["models_cache_stale"](record | {"music_models": {}, "default_video_model_family": "seedance25"}, {}))
 
 
 if __name__ == "__main__":

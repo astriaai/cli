@@ -1,4 +1,5 @@
 import io
+import json
 import runpy
 import unittest
 from contextlib import redirect_stdout
@@ -57,6 +58,21 @@ class VideoResolutionTest(unittest.TestCase):
         self.assertIn("seedance25, kling30_pro", CLI["video_model_help"](record))
         self.assertIn("seedance25: 480p/720p/1080p", CLI["video_resolution_help"](record))
         self.assertNotIn("kling30_pro:", CLI["video_resolution_help"](record))
+
+    def test_omitted_video_model_uses_the_catalog_family_default(self):
+        catalog = {"default_video_model_family": "seedance25"}
+        with patch.dict(CLI["apply_catalog_defaults"].__globals__, {"model_catalog": lambda _cfg: catalog}):
+            form = self.submitted_form(video_model=None, video_resolution=None)
+        self.assertEqual(form["prompt[video_model]"], "seedance25")
+        self.assertNotIn("prompt[video_resolution]", form)
+
+    def test_mcp_video_model_is_optional_and_points_at_list_models(self):
+        tool = next(tool for tool in CLI["operation_catalog"]() if tool["name"] == "generate_video")
+        self.assertEqual(tool["inputSchema"]["required"], ["video_prompt", "idempotency_key"])
+        properties = tool["inputSchema"]["properties"]
+        self.assertIn("list_models type=video", properties["video_model"]["description"])
+        self.assertIn("with video_resolution", properties["video_model"]["description"])
+        self.assertNotIn("astria models", json.dumps(CLI["operation_catalog"]()))
 
     def test_mcp_tool_accepts_video_resolution(self):
         tool = next(tool for tool in CLI["operation_catalog"]() if tool["name"] == "generate_video")
