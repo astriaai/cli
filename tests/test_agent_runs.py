@@ -46,6 +46,22 @@ class AgentRunCommandTest(unittest.TestCase):
         self.assertEqual(self.run_command("cancel", "42")[:2], ("POST", "/api/agent_runs/42/cancel"))
 
 
+class PromptAttachCommandTest(unittest.TestCase):
+    def test_attach_uploads_the_file_and_adds_it_to_the_prompt_results(self):
+        calls = []
+
+        def request(_cfg, method, path, **options):
+            calls.append((method, path, options))
+            return {"blob_id": 7, "url": "https://cdn.example/key"}
+
+        args = CLI["build_parser"]({}).parse_args(["prompts", "attach", "555", "final.mp4", "-w", "42"])
+        uploads = lambda _cfg, values: [{"signed_id": "signed-1", "public_url": "https://cdn.example/key"} for _ in values]
+        with patch.dict(CLI["cmd_prompts_attach"].__globals__, {"request": request, "direct_upload_records": uploads}):
+            with redirect_stdout(io.StringIO()):
+                args.func(args, {})
+        self.assertEqual(calls, [("POST", "/prompts/555/images", {"json_body": {"blob_signed_id": "signed-1"}, "workspace": "42"})])
+
+
 class AgentRunOperationTest(unittest.TestCase):
     def tools(self):
         return {tool["name"]: tool for tool in CLI["operation_catalog"]() if tool["name"].endswith("_agent_run")}

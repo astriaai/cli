@@ -78,6 +78,22 @@ Run `astria --help` for the full command list.
 such as `astria help variate`. Version output is available through
 `astria --version`, `astria -v`, or `astria version`.
 
+## Agent runs and saved results
+
+```bash
+astria agent start "/music-video a runway film in Lisbon" -w 42   # returns the task id
+astria agent get 9001                                              # state, stages, questions, artifacts
+astria agent reply 9001 --tool-call-id call-1 --answers '{"Which location?": "Beach"}'
+astria agent cancel 9001
+astria prompts attach 555 final.mp4 -w 42                          # add a local image or MP4 to a prompt's results
+```
+
+`agent start` runs the Astria agent headlessly, such as a skill that makes a
+song, a video and their mux. Poll `agent get` until the state is `completed`,
+`input_required`, `failed` or `canceled`. `prompts attach` saves a file as one
+more result of a prompt, the way the Darkroom does; the muxed film of a music
+video belongs on its video prompt.
+
 ## Image review comments
 
 ```bash
