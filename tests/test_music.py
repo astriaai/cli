@@ -93,6 +93,15 @@ class MusicOperationTest(unittest.TestCase):
         self.assertEqual(result["default_music_model"], "mureka-v9.5")
         self.assertEqual(result["music_models"], CATALOG["music_models"])
 
+    def test_list_models_type_keeps_only_that_catalog(self):
+        result = CLI["operation_result"](CLI["API_OPERATIONS"]["list_models"], CATALOG, {"type": "music"})
+        self.assertEqual(set(result), {"default_music_model", "music_models", "note", "source"})
+        self.assertEqual(result["music_models"], CATALOG["music_models"])
+
+    def test_list_models_tool_advertises_type(self):
+        tool = next(tool for tool in CLI["operation_catalog"]() if tool["name"] == "list_models")
+        self.assertEqual(tool["inputSchema"]["properties"]["type"]["enum"], ["image", "video", "music"])
+
     def test_cache_without_music_models_is_refetched(self):
         record = {"models": {"x": {}}, "base_url": CLI["base_url"]({}), "fetched_at": int(time.time())}
         self.assertTrue(CLI["models_cache_stale"](record, {}))

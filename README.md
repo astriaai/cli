@@ -43,6 +43,7 @@ update that file.
 ```bash
 astria whoami                                   # the authenticated account
 astria models                                   # popular models -> tune ids
+astria models --type video                      # only one catalog: image, video or music
 astria tunes list --gallery                     # discover every model
 astria tunes list --title "dress"               # find references
 astria generate --text "<faceid:123:1> woman, white studio" --num-images 4 --wait
