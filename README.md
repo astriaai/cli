@@ -43,7 +43,7 @@ update that file.
 ```bash
 astria whoami                                   # the authenticated account
 astria models                                   # popular models -> tune ids
-astria tunes list --gallery --branch partner-1   # discover every partner model
+astria tunes list --gallery                     # discover every model
 astria tunes list --title "dress"               # find references
 astria generate --text "<faceid:123:1> woman, white studio" --num-images 4 --wait
 astria generate --text "cinematic portrait" --film-grain --wait
@@ -57,16 +57,18 @@ astria video --video-model seedance2_fast --video-resolution 720p \
 astria video --video-model seedance2_fast --video-resolution 720p \
   --video-prompt "transition through these looks in order" \
   --image-reference ./look-1.jpg --image-reference ./look-2.jpg --wait
-astria inspect-video ./clip.mp4                   # timestamped text-to-video description
+astria music "upbeat synth-pop, female vocals" --lyrics "[Verse] City lights are calling" --wait
+astria music "lo-fi hip hop beat for studying" --instrumental --model minimax-music-3.0
+astria inspect-video ./clip.mp4                 # timestamped text-to-video description
 astria inspect-video https://example.com/clip.mp4 --tune-id 123
-astria inspect ./image.jpg                        # image-generation prompt description
+astria inspect ./image.jpg                      # image-generation prompt description
 astria inspect https://example.com/image.jpg --name dress
 astria variate ./clip.mp4 --brief 'Replace the end card with Astria' --wait
 astria variate ./clip.mp4 --reference ./dress.jpg --reference woman=./model.jpg --wait
-astria prompts wait 555 556 557                  # block until each settles (images or user_error)
+astria prompts wait 555 556 557                 # block until each settles (images or user_error)
 astria download 555 556 --out ./shots           # download a prompt's images
-astria packs get spring-lookbook                 # inspect templates and pricing
-astria api GET /prompts --query limit=5          # raw API escape hatch
+astria packs get spring-lookbook                # inspect templates and pricing
+astria api GET /prompts --query limit=5         # raw API escape hatch
 ```
 
 Run `astria --help` for the full command list.
