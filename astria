@@ -2848,6 +2848,12 @@ def operation_parser(path):
     return parser
 
 
+# Updates replace saved metadata or assignments rather than only adding content.
+DESTRUCTIVE_OPERATIONS = {
+    "update_reference", "update_prompt", "update_template", "update_workspace",
+}
+
+
 def operation_catalog():
     validate_operation_coverage()
     tools = []
@@ -2890,7 +2896,7 @@ def operation_catalog():
                             "required": list(dict.fromkeys(required)), "additionalProperties": False},
             "outputSchema": {"type": "object", "properties": {"result": {}},
                              "required": ["result"], "additionalProperties": False},
-            "annotations": {"readOnlyHint": readonly, "destructiveHint": False,
+            "annotations": {"readOnlyHint": readonly, "destructiveHint": name in DESTRUCTIVE_OPERATIONS,
                             "openWorldHint": not readonly},
             "securitySchemes": [{"type": "oauth2", "scopes": []}],
         })
