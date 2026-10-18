@@ -82,7 +82,7 @@ such as `astria help variate`. Version output is available through
 
 ```bash
 astria prompts list -w 42 --expand prompt.comments
-astria prompts get 555 -w 42 --tune 123 --expand prompt.comments
+astria prompts get 555 -w 42 --expand prompt.comments
 astria api GET /prompts/555 --query 'expand[]=prompt.comments' -w 42
 ```
 
