@@ -86,13 +86,20 @@ astria agent get 9001                                              # state, stag
 astria agent reply 9001 --tool-call-id call-1 --answers '{"Which location?": "Beach"}'
 astria agent cancel 9001
 astria prompts attach 555 final.mp4 -w 42                          # add a local image or MP4 to a prompt's results
+astria images replace 555 final.mp4 -w 42                         # replace the sole video and preserve its history
 ```
 
 `agent start` runs the Astria agent headlessly, such as a skill that makes a
 song, a video and their mux. Poll `agent get` until the state is `completed`,
 `input_required`, `failed` or `canceled`. `prompts attach` saves a file as one
 more result of a prompt, the way the Darkroom does; the muxed film of a music
-video belongs on its video prompt.
+video belongs on its video prompt. For a muxed film, use `astria images replace PROMPT_ID final.mp4`.
+The server selects the sole existing result of the same media type (image or
+video). If there are multiple candidates, select one with `--blob-id ID` from
+`prompts get` (`blob_ids` aligns with `images`).
+The original leaves the gallery only after a successful save and remains in
+debug history for one week. The final blob records its source ID, editing user,
+and timestamp. `prompts attach` continues to append.
 
 ## Image review comments
 
