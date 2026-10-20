@@ -116,7 +116,9 @@ PROMPT_FILTERS = {
     "archived": {"mode": "flag", "help": "only archived prompts; omitted selects unarchived prompts"},
     "is_multiperson": {"mode": "boolean", "help": "filter by multiperson status"},
     "is_video": {"mode": "boolean", "help": "filter by video status"},
-    "is_api": {"mode": "boolean", "help": "filter by API source"},
+    "creation_source": {"mode": "truthy", "choices": ["web", "mcp", "cli", "photoshop", "api"],
+                        "help": "filter by creation source"},
+    "is_api": {"mode": "boolean", "help": "legacy filter: web versus all API-authenticated sources"},
     "is_input_video": {"mode": "boolean", "help": "filter by input video presence"},
     "has_input_image": {"mode": "boolean", "help": "filter by input image presence"},
     "user_error": {"mode": "boolean", "help": "filter by user-visible error presence"},
@@ -167,9 +169,10 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                 ['limit', 'limit', 'truthy'],
                                 ['offset', 'offset', 'truthy'],
                                 ['model_type', 'model_type', 'truthy'],
-                                ['branch', 'branch', 'truthy']],
+                                ['branch', 'branch', 'truthy'],
+                                ['creation_source', 'creation_source', 'truthy']],
                      'target': 'query',
-                     'result': {'pick': ['id', 'title', 'name', 'model_type', 'orig_images']},
+                     'result': {'pick': ['id', 'title', 'name', 'model_type', 'creation_source', 'creation_client', 'orig_images']},
                      'path_choice': ['gallery', '/gallery/tunes']},
  'get_reference': {'method': 'GET', 'path': '/tunes/{id}', 'fields': [], 'target': 'query', 'result': {}},
  'create_reference': {'method': 'POST',
@@ -256,6 +259,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                              for name, spec in PROMPT_FILTERS.items()] + [['expand[]', 'expand', 'array']],
                   'target': 'query',
                   'result': {'pick': ['id',
+                                      'creation_source',
+                                      'creation_client',
                                       'text',
                                       'num_images',
                                       'cost_mc',
@@ -2492,6 +2497,7 @@ def build_parser(models_record=None):
     p.add_argument("--name", action="append", help="filter by class name (repeatable)")
     p.add_argument("--model-type", help="filter by model_type (e.g. faceid)")
     p.add_argument("--branch", help="filter by branch (e.g. partner-1 to discover partner models)")
+    p.add_argument("--creation-source", choices=["web", "mcp", "cli", "photoshop", "api"], help="filter by creation source")
     p.add_argument("--gallery", action="store_true", help="query the public gallery instead")
     p.add_argument("--limit")
     p.add_argument("--offset")
