@@ -117,6 +117,8 @@ PROMPT_FILTERS = {
     "archived": {"mode": "flag", "help": "only archived prompts; omitted selects unarchived prompts"},
     "is_multiperson": {"mode": "boolean", "help": "filter by multiperson status"},
     "is_video": {"mode": "boolean", "help": "filter by video status"},
+    "media_type": {"mode": "truthy", "choices": ["image", "video", "music"],
+                   "help": "filter by media type; image excludes music; takes precedence over is_video"},
     "creation_source": {"mode": "truthy", "choices": ["web", "mcp", "cli", "photoshop", "api"],
                         "help": "filter by creation source"},
     "is_api": {"mode": "boolean", "help": "legacy filter: web versus all API-authenticated sources"},
