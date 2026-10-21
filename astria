@@ -313,6 +313,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
 
 
 API_OPERATIONS.update({
+    "attach_prompt_media": {"method": "POST", "path": "/prompts/{id}/images", "target": "json_body",
+        "fields": [["blob_signed_id", "blob_signed_id", "value"]], "result": {}},
     "create_workspace": {"method": "POST", "path": "/workspaces.json", "target": "json_body", "root": "workspace",
         "fields": [["title", "title", "value"], ["url", "url", "value"]], "result": {}, "no_workspace": True},
     "get_workspace": {"method": "GET", "path": "/workspaces/{id}.json", "target": "query", "fields": [], "result": {}},
@@ -1321,8 +1323,14 @@ def cmd_prompts_update(args, cfg):
 
 def cmd_prompts_attach(args, cfg):
     # The Darkroom's save path, optionally replacing one result with a retained original.
-    blob = direct_upload_records(cfg, [args.file])[0]
-    payload = {"blob_signed_id": blob["signed_id"]}
+    if bool(args.file) == bool(args.blob_signed_id):
+        die("provide exactly one local file or --blob-signed-id")
+    if args.file:
+        args.blob_signed_id = direct_upload_records(cfg, [args.file])[0]["signed_id"]
+    if not args.replace and args.replace_blob_id is None:
+        emit(execute_api_operation("attach_prompt_media", args, cfg))
+        return
+    payload = {"blob_signed_id": args.blob_signed_id}
     if args.replace_blob_id is not None:
         payload["replace_blob_id"] = args.replace_blob_id
     elif args.replace:
@@ -2560,14 +2568,15 @@ def build_parser(models_record=None):
     p.set_defaults(func=cmd_prompts_update)
     p = prompts.add_parser("attach", parents=[ws_parent], help="add a local image or MP4 to a prompt's results, e.g. a muxed film onto its video prompt")
     p.add_argument("id")
-    p.add_argument("file", help="PNG, JPEG, WebP or AVIF image, or MP4 video")
+    p.add_argument("file", nargs="?", help="PNG, JPEG, WebP or AVIF image, or MP4 video")
+    p.add_argument("--blob-signed-id", help="signed upload ID from create_upload; upload the bytes before attaching")
     p.set_defaults(func=cmd_prompts_attach, replace=False, replace_blob_id=None)
     images = sub.add_parser("images", help="manage prompt result images and videos").add_subparsers(dest="images_cmd", required=True)
     p = images.add_parser("replace", parents=[ws_parent], help="replace the sole result of the same media type and retain its original in debug history")
     p.add_argument("id", help="prompt ID")
     p.add_argument("file", help="replacement image or MP4 video")
     p.add_argument("--blob-id", dest="replace_blob_id", type=int, help="select a result when the prompt has multiple images or videos")
-    p.set_defaults(func=cmd_prompts_attach, replace=True)
+    p.set_defaults(func=cmd_prompts_attach, replace=True, blob_signed_id=None)
     p = prompts.add_parser("wait", parents=[ws_parent],
                            help="block until one or more prompts have images or a user_error")
     p.add_argument("ids", nargs="*", help="prompt ids (also accepted via --prompts-file or stdin)")
@@ -2932,6 +2941,7 @@ OPERATION_POLICIES = {
     "list_prompts": (("prompts", "list"), True, set()),
     "get_prompt": (("prompts", "get"), True, set()),
     "update_prompt": (("prompts", "update"), False, set()),
+    "attach_prompt_media": (("prompts", "attach"), False, {"file"}),
     "list_templates": (("packs", "list"), True, set()),
     "get_template": (("packs", "get"), True, set()),
     "create_template": (("packs", "create"), False, set()),
@@ -2952,7 +2962,6 @@ CLI_ONLY_COMMANDS = {
     ("variate",): "Multi-stage inspection/generation workflow not yet exported",
     ("inspect-video",): "Blocking inspection workflow not yet exported", ("inspect",): "Inspection not yet exported",
     ("download",): "Writes local files", ("agent", "handoff"): "Embedded-agent session handoff",
-    ("prompts", "attach"): "Local-file input, uploaded through the Darkroom's save path",
     ("images", "replace"): "Local-file replacement with original retained in debug history",
     ("landing", "get"): "Local HTML extraction; MCP get_workspace returns metadata",
     ("landing", "set"): "Local-file input; MCP update_workspace accepts supplied HTML",
@@ -2981,6 +2990,7 @@ def validate_operation_coverage():
             f"stale={sorted((exposed | excluded) - commands)}, duplicate={sorted(exposed & excluded)}")
 
 OPERATION_DESCRIPTIONS = {
+    'attach_prompt_media': 'Append an uploaded image or MP4 to an existing prompt, for example a finished muxed film. First prepare an upload with create_upload and successfully upload its bytes, then pass its blob_signed_id and the prompt id. Supports PNG, JPEG, WebP, AVIF and MP4. Preserves existing results; does not generate or replace media. Requires an idempotency_key. Returns the saved asset and updated prompt; use get_prompt to view all results.',
     'create_workspace': 'Create a separate brand/team workspace when requested. Supply its title and optional canonical website URL. Returns the workspace ID; use it on subsequent references, templates and generations. Does not invite members or generate images.',
     'get_workspace': 'Inspect a selected workspace by ID, including its brand website and metadata. Does not create or change the workspace.',
     'update_workspace': 'Update a selected workspace title, brand website URL or supplied landing page HTML. Does not publish the workspace, invite members or change billing. Provide only the fields to change.',
@@ -3076,6 +3086,8 @@ def operation_catalog():
             required.append("text")
         if name == "create_reference":
             required.append("image_url")
+        if name == "attach_prompt_media":
+            required.append("blob_signed_id")
         if name == "start_agent_run":
             required.append("workspace")
         if not readonly:
@@ -3138,7 +3150,7 @@ def run_operation(name, arguments, transport):
     if unknown or missing:
         raise AstriaError(f"Invalid arguments: unknown={sorted(unknown)}, missing={sorted(missing)}")
     parser = operation_parser(path)
-    values = {action.dest: action.default for action in parser._actions if action.dest != "help"}
+    values = {**parser._defaults, **{action.dest: action.default for action in parser._actions if action.dest != "help"}}
     for key, value in arguments.items():
         spec = schema["properties"][key]
         if not validate_argument(spec, value):
