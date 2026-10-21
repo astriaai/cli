@@ -315,6 +315,9 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
 API_OPERATIONS.update({
     "attach_prompt_media": {"method": "POST", "path": "/prompts/{id}/images", "target": "json_body",
         "fields": [["blob_signed_id", "blob_signed_id", "value"]], "result": {}},
+    "replace_prompt_media": {"method": "POST", "path": "/prompts/{id}/images", "target": "json_body",
+        "fields": [["blob_signed_id", "blob_signed_id", "value"], ["replace_blob_id", "replace_blob_id", "value"],
+            ["replace", "replace", "value"]], "result": {}},
     "create_workspace": {"method": "POST", "path": "/workspaces.json", "target": "json_body", "root": "workspace",
         "fields": [["title", "title", "value"], ["url", "url", "value"]], "result": {}, "no_workspace": True},
     "get_workspace": {"method": "GET", "path": "/workspaces/{id}.json", "target": "query", "fields": [], "result": {}},
@@ -1327,15 +1330,7 @@ def cmd_prompts_attach(args, cfg):
         die("provide exactly one local file or --blob-signed-id")
     if args.file:
         args.blob_signed_id = direct_upload_records(cfg, [args.file])[0]["signed_id"]
-    if not args.replace and args.replace_blob_id is None:
-        emit(execute_api_operation("attach_prompt_media", args, cfg))
-        return
-    payload = {"blob_signed_id": args.blob_signed_id}
-    if args.replace_blob_id is not None:
-        payload["replace_blob_id"] = args.replace_blob_id
-    elif args.replace:
-        payload["replace"] = True
-    emit(request(cfg, "POST", f"/prompts/{args.id}/images", json_body=payload, workspace=args.workspace))
+    emit(execute_api_operation("replace_prompt_media" if args.replace else "attach_prompt_media", args, cfg))
 
 def cmd_prompts_wait(args, cfg):
     ids = collect_prompt_ids(args)
@@ -2574,7 +2569,8 @@ def build_parser(models_record=None):
     images = sub.add_parser("images", help="manage prompt result images and videos").add_subparsers(dest="images_cmd", required=True)
     p = images.add_parser("replace", parents=[ws_parent], help="replace the sole result of the same media type and retain its original in debug history")
     p.add_argument("id", help="prompt ID")
-    p.add_argument("file", help="replacement image or MP4 video")
+    p.add_argument("file", nargs="?", help="replacement image or MP4 video")
+    p.add_argument("--blob-signed-id", help="signed upload ID from create_upload; upload the bytes before replacing")
     p.add_argument("--blob-id", dest="replace_blob_id", type=int, help="select a result when the prompt has multiple images or videos")
     p.set_defaults(func=cmd_prompts_attach, replace=True, blob_signed_id=None)
     p = prompts.add_parser("wait", parents=[ws_parent],
@@ -2942,6 +2938,7 @@ OPERATION_POLICIES = {
     "get_prompt": (("prompts", "get"), True, set()),
     "update_prompt": (("prompts", "update"), False, set()),
     "attach_prompt_media": (("prompts", "attach"), False, {"file"}),
+    "replace_prompt_media": (("images", "replace"), False, {"file"}),
     "list_templates": (("packs", "list"), True, set()),
     "get_template": (("packs", "get"), True, set()),
     "create_template": (("packs", "create"), False, set()),
@@ -2962,7 +2959,6 @@ CLI_ONLY_COMMANDS = {
     ("variate",): "Multi-stage inspection/generation workflow not yet exported",
     ("inspect-video",): "Blocking inspection workflow not yet exported", ("inspect",): "Inspection not yet exported",
     ("download",): "Writes local files", ("agent", "handoff"): "Embedded-agent session handoff",
-    ("images", "replace"): "Local-file replacement with original retained in debug history",
     ("landing", "get"): "Local HTML extraction; MCP get_workspace returns metadata",
     ("landing", "set"): "Local-file input; MCP update_workspace accepts supplied HTML",
     ("cache", "refresh"): "Local cache", ("cache", "path"): "Local cache",
@@ -2991,6 +2987,7 @@ def validate_operation_coverage():
 
 OPERATION_DESCRIPTIONS = {
     'attach_prompt_media': 'Append an uploaded image or MP4 to an existing prompt, for example a finished muxed film. First prepare an upload with create_upload and successfully upload its bytes, then pass its blob_signed_id and the prompt id. Supports PNG, JPEG, WebP, AVIF and MP4. Preserves existing results; does not generate or replace media. Requires an idempotency_key. Returns the saved asset and updated prompt; use get_prompt to view all results.',
+    'replace_prompt_media': 'Replace a saved image or MP4 result only when requested. First successfully upload the replacement with create_upload, then pass its blob_signed_id and the prompt id. Omit replace_blob_id only when the prompt has exactly one result of the replacement media type; otherwise select its blob_id from get_prompt. Retains the original in debug history and preserves other results. Does not generate media. Requires an idempotency_key; reuse the same key and arguments for a retry. Returns the saved asset and updated prompt; use get_prompt with expand=["debug_images"] to inspect history.',
     'create_workspace': 'Create a separate brand/team workspace when requested. Supply its title and optional canonical website URL. Returns the workspace ID; use it on subsequent references, templates and generations. Does not invite members or generate images.',
     'get_workspace': 'Inspect a selected workspace by ID, including its brand website and metadata. Does not create or change the workspace.',
     'update_workspace': 'Update a selected workspace title, brand website URL or supplied landing page HTML. Does not publish the workspace, invite members or change billing. Provide only the fields to change.',
@@ -3047,7 +3044,7 @@ def operation_parser(path):
 # Updates replace saved metadata or assignments rather than only adding content;
 # cancelling stops an agent's work in progress.
 DESTRUCTIVE_OPERATIONS = {
-    "update_reference", "update_prompt", "update_template", "update_workspace", "cancel_agent_run",
+    "update_reference", "update_prompt", "update_template", "update_workspace", "cancel_agent_run", "replace_prompt_media",
 }
 
 
@@ -3086,7 +3083,7 @@ def operation_catalog():
             required.append("text")
         if name == "create_reference":
             required.append("image_url")
-        if name == "attach_prompt_media":
+        if name in ("attach_prompt_media", "replace_prompt_media"):
             required.append("blob_signed_id")
         if name == "start_agent_run":
             required.append("workspace")
@@ -3132,7 +3129,7 @@ def operation_contract():
         if unmapped:
             raise AstriaError(f"{name} has unmapped parameters: {sorted(unmapped)}")
         operations[name] = {**definition,
-            "defaults": {**{spec[1]: None for spec in definition["fields"]},
+            "defaults": {**{spec[1]: parser.get_default(spec[1]) for spec in definition["fields"]},
                          **{action.dest: action.default for action in actions}},
             "integer_arguments": [action.dest for action in actions if action.type is int]}
     return {"version": 1, "operations": operations, "cli_only_commands": {" ".join(path): reason for path, reason in CLI_ONLY_COMMANDS.items()}, "prompt_filters": PROMPT_FILTERS,
