@@ -219,7 +219,7 @@ class DirectUploadTest(unittest.TestCase):
                 slug="lookbook", tune_id=None, tune_replacements=None, title="Look", name="dress",
                 image=[str(first), str(second)], image_url=None, brief=None,
                 prompt_ids=None, num_images=None, aspect_ratio=None, resolution=None,
-                inpaint_faces=None, attr=None, workspace=None,
+                inpaint_faces=None, attr=None, prompt_attributes=None, workspace=None,
             )
 
             with patch.dict(CLI["cmd_packs_run"].__globals__, {

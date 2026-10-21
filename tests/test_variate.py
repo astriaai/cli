@@ -18,8 +18,6 @@ class VariateTest(unittest.TestCase):
             "brief": "Replace the wardrobe",
             "tune_ids": ["88"],
             "references": ["dress.jpg", "woman=model.jpg"],
-            "description": None,
-            "description_file": None,
             "base_pack_id": 12,
             "order_id": 34,
             "workspace": "7",
@@ -38,8 +36,6 @@ class VariateTest(unittest.TestCase):
 
         def request(_cfg, method, path, **kwargs):
             calls.append((method, path, kwargs))
-            if path == "/videos/inspect":
-                return {"description": "00-05 - A presenter walks toward camera."}
             if path == "/images/class_name":
                 return {
                     "class_name": "dress",
@@ -51,15 +47,15 @@ class VariateTest(unittest.TestCase):
                 form = dict(kwargs["form"])
                 name = form["tune[name]"]
                 return {"id": 201 if name == "dress" else 202, "name": name, "title": form["tune[title]"]}
-            if path == "/assist/complete":
-                return {"text": json.dumps({"video_prompt": "Keep <faceid:88:1> in the same performance."})}
+            if path == "/variate/prompt":
+                return {"video_prompt": "Edit video 1. Replace <faceid:88:1>, <faceid:201:1> and <faceid:202:1>."}
             if path == "/prompts":
                 return {"prompt": {"id": 901, "images": []}}
             raise AssertionError(path)
 
         with patch.dict(CLI["cmd_variate"].__globals__, {
             "direct_upload_records": upload,
-            "model_catalog": lambda _cfg: {"video_models": {"seedance25_720p": {}}},
+            "model_catalog": lambda _cfg: {"video_models": {"seedance25_draft": {}}},
             "resolve_model": lambda _cfg, _name: "999",
             "request": request,
         }):
@@ -81,12 +77,10 @@ class VariateTest(unittest.TestCase):
         self.assertIn(("tune[name]", "woman"), named_form)
         self.assertIn(("tune[images][]", "signed-woman"), named_form)
 
-        assist = next(call for call in calls if call[1] == "/assist/complete")
+        assist = next(call for call in calls if call[1] == "/variate/prompt")
         assist_body = assist[2]["json_body"]
-        self.assertEqual(assist_body["messages"][0]["content"], CLI["VARIATE_SYSTEM_MESSAGE"])
-        self.assertIn("00-05 - A presenter walks toward camera.", assist_body["messages"][1]["content"])
-        self.assertIn("<faceid:88:1>\n<faceid:201:1>\n<faceid:202:1>", assist_body["messages"][1]["content"])
-        self.assertEqual(assist_body["response_schema"], CLI["VARIATE_PROMPT_SCHEMA"])
+        self.assertEqual(assist_body, {"brief": "Replace the wardrobe", "tune_ids": ["88", "201", "202"]})
+        self.assertNotIn("/videos/inspect", [call[1] for call in calls])
 
         create = next(call for call in calls if call[1] == "/prompts")
         self.assertEqual(create[2]["query"], [("view", "board")])
@@ -94,11 +88,8 @@ class VariateTest(unittest.TestCase):
         self.assertEqual(prompt, {
             "text": "",
             "tune_id": 999,
-            "video_model": "seedance25_720p",
-            "video_prompt": (
-                "Replace objects in the scene with <faceid:201:1> <faceid:202:1>. "
-                "Keep <faceid:88:1> in the same performance."
-            ),
+            "video_model": "seedance25_draft",
+            "video_prompt": "Edit video 1. Replace <faceid:88:1>, <faceid:201:1> and <faceid:202:1>.",
             "video_audio": True,
             "input_video": "signed-video",
             "base_pack_id": 12,
@@ -111,14 +102,14 @@ class VariateTest(unittest.TestCase):
         self.assertEqual([reference["id"] for reference in result["references"]], [88, 201, 202])
         self.assertEqual(result["prompt"]["id"], 901)
 
-    def test_remote_source_and_description_skip_upload_and_inspection(self):
+    def test_remote_source_skips_upload_and_inspection(self):
         upload = Mock(return_value=[])
         calls = []
 
         def request(_cfg, method, path, **kwargs):
             calls.append((method, path, kwargs))
-            if path == "/assist/complete":
-                return {"text": '{"video_prompt":"Use <faceid:55:1> for the replacement."}'}
+            if path == "/variate/prompt":
+                return {"video_prompt": "Edit video 1. Use <faceid:55:1> for the replacement."}
             if path == "/prompts":
                 return {"prompt": {"id": 902}}
             raise AssertionError(path)
@@ -128,13 +119,12 @@ class VariateTest(unittest.TestCase):
             brief="",
             tune_ids=["55", "55"],
             references=[],
-            description=" 00-03 - A product rotates. ",
             base_pack_id=None,
             order_id=None,
         )
         with patch.dict(CLI["cmd_variate"].__globals__, {
             "direct_upload_records": upload,
-            "model_catalog": lambda _cfg: {"video_models": {"seedance25_720p": {}}},
+            "model_catalog": lambda _cfg: {"video_models": {"seedance25_draft": {}}},
             "resolve_model": lambda _cfg, _name: "999",
             "request": request,
         }):
@@ -152,22 +142,21 @@ class VariateTest(unittest.TestCase):
         args = self.args(
             source="https://example.com/source.mp4",
             references=[],
-            description="00-03 - A product rotates.",
             base_pack_id=None,
             order_id=None,
             wait=True,
         )
 
         def request(_cfg, _method, path, **_kwargs):
-            if path == "/assist/complete":
-                return {"text": '{"video_prompt":"Use <faceid:88:1> for the replacement."}'}
+            if path == "/variate/prompt":
+                return {"video_prompt": "Edit video 1. Use <faceid:88:1> for the replacement."}
             if path == "/prompts":
                 return {"prompt": {"id": 903}}
             raise AssertionError(path)
 
         with patch.dict(CLI["cmd_variate"].__globals__, {
             "direct_upload_records": lambda _cfg, _values: [],
-            "model_catalog": lambda _cfg: {"video_models": {"seedance25_720p": {}}},
+            "model_catalog": lambda _cfg: {"video_models": {"seedance25_draft": {}}},
             "resolve_model": lambda _cfg, _name: "999",
             "request": request,
             "poll_prompt": poll,

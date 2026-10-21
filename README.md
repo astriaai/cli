@@ -161,8 +161,9 @@ tunes. A request may use local files or URLs, but does not mix the two forms.
 ## Variate a video
 
 `astria variate` carries the Variate mini-app flow into one command: it
-inspects a driving video, turns an edit brief and replacement references into
-a production-ready Seedance 2.5 video-to-video prompt, then creates the video.
+turns an edit brief and replacement references into a Seedance 2.5 video edit
+prompt through `/variate/prompt`, then creates the video. It sends the source
+video directly to generation, without inspecting or describing it first.
 
 ```bash
 # Brief-only edit
@@ -176,9 +177,8 @@ astria variate ./source.mp4 \
   --reference woman=https://example.com/model.jpg \
   --brief 'Keep the performance and replace the presenter and wardrobe' --wait
 
-# Skip paid video inspection when a description is already available
+# Edit a remote video directly
 astria variate https://example.com/source.mp4 \
-  --description-file ./source-description.txt \
   --brief 'Use a warmer end-card treatment'
 ```
 
@@ -189,12 +189,33 @@ astria variate https://example.com/source.mp4 \
 - `--tune-id ID` reuses an existing replacement tune. Existing tune ids are
   composed before newly-created references, and each group keeps flag order.
 - Either a non-empty `--brief` or at least one reference is required.
-- `--description` and `--description-file` bypass source-video inspection.
-- Variate intentionally fixes `video_model=seedance25_720p` and audio on, and
+- Source-video inspection and the `--description` / `--description-file` flags
+  have been removed from Variate. Use `astria inspect-video` separately when
+  you actually want a video description.
+- Variate follows the GUI with `video_model=seedance25_draft` and audio on, and
   leaves duration and aspect ratio unset so they follow the source video.
-- Output is structured JSON containing `description`, `references`,
-  `video_prompt`, and `prompt`. `--wait` replaces `prompt` with its settled
+- Output is structured JSON containing `references`, `video_prompt`, and `prompt`. `--wait` replaces `prompt` with its settled
   generation record.
+
+For MCP, the same workflow uses `classify_image` (for unnamed new reference
+images), `create_reference`, `compose_video_edit`, and `generate_video` with
+`input_video`. Pass the composition result's generation fields unchanged;
+`video_model: null` lets the API apply its default. Poll `get_prompt` for results.
+Each write uses its own idempotency key, reused only for an identical retry.
+
+Other REST-backed operations:
+
+```bash
+astria classify-image https://example.com/dress.jpg --class-name dress --class-name shoes
+astria video-edit-prompt --brief 'Replace the outfit' --tune-id 123
+astria workspaces update 7 --brief 'Create a minimal editorial landing page'
+astria packs run editorial --tune-id 123 --prompt-attributes '{"seed":"42","super_resolution":"true"}'
+```
+
+Workspace `--brief` regenerates and replaces the full landing page. Template
+`--prompt-attributes` uses string values, overrides matching named flags, and
+is itself overridden by legacy `--attr KEY=VALUE` flags in CLI usage. The REST
+endpoint still controls which prompt attributes are supported.
 
 ## Profiles
 
