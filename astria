@@ -332,6 +332,9 @@ API_OPERATIONS.update({
             ["replace", "replace", "value"]], "result": {}},
     "create_workspace": {"method": "POST", "path": "/workspaces.json", "target": "json_body", "root": "workspace",
         "fields": [["title", "title", "value"], ["url", "url", "value"]], "result": {}, "no_workspace": True},
+    "attach_workspace_images": {"method": "POST", "path": "/workspaces/{id}/attach_images.json", "target": "json_body",
+        "fields": [["signed_ids", "signed_ids", "json"], ["image_urls", "image_urls", "json"]],
+        "result": {}, "requires_any": ["signed_ids", "image_urls"]},
     "get_workspace": {"method": "GET", "path": "/workspaces/{id}.json", "target": "query", "fields": [], "result": {}},
     "update_workspace": {"method": "PATCH", "path": "/workspaces/{id}.json", "target": "json_body", "root": "workspace",
         "fields": [["title", "title", "value"], ["url", "url", "value"], ["landing_page_html", "landing_page_html", "value"], ["brief", "brief", "value"]],
@@ -1800,6 +1803,10 @@ def cmd_workspaces_get(args, cfg):
     emit(execute_api_operation("get_workspace", args, cfg))
 
 
+def cmd_workspaces_attach_images(args, cfg):
+    emit(execute_api_operation("attach_workspace_images", args, cfg))
+
+
 def cmd_workspaces_update(args, cfg):
     emit(execute_api_operation("update_workspace", args, cfg))
 
@@ -2804,6 +2811,11 @@ def build_parser(models_record=None):
     wu.add_argument("--landing-page-html")
     wu.add_argument("--brief", help="regenerate the entire landing page from this brief; replaces existing HTML")
     wu.set_defaults(func=cmd_workspaces_update)
+    wa = workspaces.add_parser("attach-images", parents=[ws_parent], help="save uploaded or remote images to a workspace")
+    wa.add_argument("id")
+    wa.add_argument("--signed-id", dest="signed_ids", action="append", help="signed blob ID from a completed upload (repeatable)")
+    wa.add_argument("--image-url", dest="image_urls", action="append", help="public HTTPS image URL, including completed Astria direct uploads (repeatable)")
+    wa.set_defaults(func=cmd_workspaces_attach_images)
 
     # agent handoff
     agent = sub.add_parser("agent", help="Astria embedded agent").add_subparsers(dest="sub", required=True)
@@ -2934,6 +2946,7 @@ OPERATION_POLICIES = {
     "create_template": (("packs", "create"), False, set()),
     "update_template": (("packs", "update"), False, set()),
     "create_workspace": (("workspaces", "create"), False, set()),
+    "attach_workspace_images": (("workspaces", "attach-images"), False, set()),
     "get_workspace": (("workspaces", "get"), True, set()),
     "update_workspace": (("workspaces", "update"), False, set()),
     "run_template": (("packs", "run"), False, {"image", "attr"}),
@@ -2984,7 +2997,8 @@ OPERATION_DESCRIPTIONS = {
     'attach_prompt_media': 'Append an uploaded image or MP4 to an existing prompt, for example a finished muxed film. First prepare an upload with create_upload and successfully upload its bytes, then pass its blob_signed_id and the prompt id. Supports PNG, JPEG, WebP, AVIF and MP4. Preserves existing results; does not generate or replace media. Requires an idempotency_key. Returns the saved asset and updated prompt; use get_prompt to view all results.',
     'replace_prompt_media': 'Replace a saved image or MP4 result only when requested. First successfully upload the replacement with create_upload, then pass its blob_signed_id and the prompt id. Omit replace_blob_id only when the prompt has exactly one result of the replacement media type; otherwise select its blob_id from get_prompt. Retains the original in debug history and preserves other results. Does not generate media. Requires an idempotency_key; reuse the same key and arguments for a retry. Returns the saved asset and updated prompt; use get_prompt with expand=["debug_images"] to inspect history.',
     'create_workspace': 'Create a separate brand/team workspace when requested. Supply its title and optional canonical website URL. Returns the workspace ID; use it on subsequent references, templates and generations. Does not invite members or generate images.',
-    'get_workspace': 'Inspect a selected workspace by ID, including its brand website and metadata. Does not create or change the workspace.',
+    'get_workspace': 'Inspect a selected workspace by ID, including its brand website, landing_page_html and attached images with persistent URLs. Does not create or change the workspace.',
+    'attach_workspace_images': 'Attach images to a selected workspace before using them on its landing page. Supply image_urls for public HTTPS images (including completed Astria direct uploads), signed_ids from completed create_upload uploads, or both. Reuses Astria uploads and imports external images into workspace storage. Supports PNG, JPEG, WebP, AVIF and GIF up to 100 MB each. Preserves existing workspace images and does not generate media. Returns workspace_id and images with id, blob_id, url, filename and content_type; use the returned URLs in landing_page_html. Requires an idempotency_key for safe retries.',
     'update_workspace': 'Update a selected workspace title, brand website URL or supplied landing page HTML. Does not publish the workspace, invite members or change billing. Provide only the fields to change. Set brief only when the user requests full landing-page regeneration; it replaces existing HTML. Use get_workspace to read the generated HTML. Requires an idempotency_key for safe retries.',
     'create_template': 'Create a reusable photoshoot template container in the selected workspace. Supply a title, model and optional main product category; author its shots with generate_images using the returned pack_id, then set reference categories with update_template. Creating the container does not generate images.',
     'update_template': 'Update an existing template title, subtitle or reference categories. Does not generate images or replace its prompts. Inspect get_template before changing its category slots.',
@@ -3011,7 +3025,7 @@ OPERATION_DESCRIPTIONS = {
 
 
 REMOTE_MEDIA_ARGUMENTS = {
-    "image_url", "input_image", "mask_image", "references", "image_references",
+    "image_urls", "image_url", "input_image", "mask_image", "references", "image_references",
     "first_frame", "last_frame", "input_video", "audio_reference", "file_url", "source",
 }
 
