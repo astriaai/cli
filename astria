@@ -199,6 +199,10 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                 ['prompt[seed]', 'seed', 'truthy'],
                                 ['prompt[film_grain]', 'film_grain', 'boolean'],
                                 ['prompt[inpaint_faces]', 'inpaint_faces', 'boolean'],
+                                ['prompt[inpaint_preset]', 'inpaint_preset', 'value'],
+                                ['prompt[background_color]', 'background_color', 'value'],
+                                ['prompt[create_crops]', 'create_crops', 'value'],
+                                ['prompt[lynx]', 'lynx', 'boolean'],
                                 ['prompt[aspect_ratio]', 'aspect_ratio', 'truthy'],
                                 ['prompt[resolution]', 'resolution', 'truthy'],
                                 ['prompt[input_image]', 'input_image', 'media'],
@@ -373,6 +377,8 @@ for generation_operation in ("generate_images", "generate_video", "generate_musi
     API_OPERATIONS[generation_operation]["fields"].append(["prompt[skill_name]", "skill_name", "truthy"])
 
 JSON_ARGUMENT_SCHEMAS = {
+    "background_color": {"type": "string", "pattern": "#?(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})"},
+    "create_crops": {"type": "integer", "minimum": 0, "maximum": 100},
     "prompt_attributes": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
         "additionalProperties": {"type": "string"}},
     "sources": {"type": "array", "items": {"type": "object", "properties": {
@@ -397,6 +403,8 @@ def validate_argument(schema, value):
         return (isinstance(value, str) and len(value) >= schema.get("minLength", 0)
             and ("pattern" not in schema or re.fullmatch(schema["pattern"], value) is not None)
             and ("enum" not in schema or value in schema["enum"]))
+    if kind == "integer":
+        return (type(value) is int and schema.get("minimum", value) <= value <= schema.get("maximum", value))
     if kind == "boolean":
         return isinstance(value, bool)
     if kind == "array":
@@ -2575,6 +2583,13 @@ def build_parser(models_record=None):
     p.add_argument("--input-image", help="URL or local file to edit")
     p.add_argument("--inpaint-faces", action=argparse.BooleanOptionalAction, default=None,
                    help="enable or disable face inpainting; omit to use the model default")
+    p.add_argument("--inpaint-preset", choices=("strong", "identity"),
+                   help="face inpainting preset; enables face inpainting; cannot combine with inpaint_faces=false")
+    p.add_argument("--background-color", help="target background hex color, e.g. #ffffff; overrides the text flag")
+    p.add_argument("--create-crops", type=structured_argument("create_crops"), nargs="?", const=60,
+                   help="top/bottom crop size as a percentage (1-100); bare CLI flag uses 60; 0 disables crops")
+    p.add_argument("--lynx", action=argparse.BooleanOptionalAction, default=None,
+                   help="enable or disable Lynx processing using reference image metadata; overrides the text flag")
     p.add_argument("--mask-image", help="URL or local file to use as an inpainting mask")
     p.add_argument("--reference", "--images", dest="references", action="append", metavar="NAME=PATH_OR_URL",
                    help="create and attach a reference; repeat for each NAME=PATH_OR_URL (--images is an alias)")
