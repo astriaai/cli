@@ -186,11 +186,13 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                  ['tune[base_tune_id]', 'model_id', 'value'],
                                  ['tune[characteristics]', 'characteristics', 'json_string'],
                                  ['tune[image_urls][]', 'image_url', 'array'],
-                                 ['tune[images][]', 'image', 'array']],
+                                 ['tune[images][]', 'image', 'array'],
+                                 ['tune[image_captions][]', 'image_caption', 'array']],
                       'target': 'form',
                       'result': {},
                       'model': {'argument': 'model', 'output': 'model_id'},
                       'requires_any': ['image_url', 'image'],
+                      'per_image': {'argument': 'image_caption', 'images': ['image_url', 'image']},
                       'characteristics': {'short_description': 'description', 'text': 'text'}},
  'generate_images': {'method': 'POST',
                      'path': '/tunes/{model_id}/prompts',
@@ -525,6 +527,12 @@ def execute_api_operation(name, args, cfg, *, extra_fields=None):
     apply_catalog_defaults(cfg, definition, values)
     if "requires_present" in definition and not any(values.get(key) is not None for key in definition["requires_present"]):
         raise AstriaError("Provide at least one of: " + ", ".join(definition["requires_present"]))
+    if "per_image" in definition:
+        spec = definition["per_image"]
+        items = values.get(spec["argument"])
+        count = sum(len(values.get(key) or []) for key in spec["images"])
+        if items and len(items) != count:
+            raise AstriaError(f"Provide one {spec['argument']} per image: {count} images, {len(items)} given")
     if "characteristics" in definition:
         changes = {key: values[argument] for key, argument in definition["characteristics"].items()
                    if values.get(argument) is not None}
@@ -1341,6 +1349,9 @@ def cmd_tunes_get(args, cfg):
 def cmd_tunes_create(args, cfg):
     if not (args.image_url or args.image):
         die("provide at least one --image-url or --image")
+    if getattr(args, "image_caption", None) and args.image_url and args.image:
+        # Rails attaches uploaded files before URLs, so a mixed set has no single caption order.
+        die("--image-caption needs images from only --image-url or only --image")
     values = vars(args).copy()
     values["image"] = direct_uploads(cfg, args.image or [])
     emit(execute_api_operation("create_reference", argparse.Namespace(**values), cfg))
@@ -2500,6 +2511,10 @@ def build_parser(models_record=None):
     p.add_argument("--text", help="injected text (stored in characteristics.text); an empty string clears it")
     p.add_argument("--image-url", action="append", help="training image URL (repeatable)")
     p.add_argument("--image", action="append", help="local training image file (repeatable)")
+    p.add_argument("--image-caption", action="append",
+                   help="view caption per training image, one per image in --image-url order (repeatable): front, back, "
+                        "side, detail or logo; a close-up names its side, e.g. back detail. A generation asking for a "
+                        "front or back view drops images whose caption names the other side")
     p.set_defaults(func=cmd_tunes_create)
     p = tunes.add_parser("update", parents=[ws_parent], help="update a tune")
     p.add_argument("id")
