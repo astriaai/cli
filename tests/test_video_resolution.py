@@ -50,6 +50,19 @@ class VideoResolutionTest(unittest.TestCase):
             self.assertEqual(ns.seed, "42")
         self.assertEqual(self.submitted_form(seed="42")["prompt[seed]"], "42")
 
+    def test_leaves_aspect_ratio_and_image_count_to_the_server(self):
+        # Video models differ in supported ratios (Kling 4.0 has no 3:4) and video prompts take one first frame.
+        parser = CLI["build_parser"]({})
+        ns = parser.parse_args(["video", "--video-prompt", "x"])
+        self.assertIsNone(ns.aspect_ratio)
+        self.assertIsNone(ns.num_images)
+        form = self.submitted_form(aspect_ratio=None, num_images=None)
+        self.assertNotIn("prompt[aspect_ratio]", form)
+        self.assertNotIn("prompt[num_images]", form)
+        contract = CLI["operation_contract"]()["operations"]["generate_video"]
+        self.assertIsNone(contract["defaults"]["aspect_ratio"])
+        self.assertNotIn("image_count", contract)
+
     def test_omits_resolution_for_the_family_default(self):
         self.assertNotIn("prompt[video_resolution]", self.submitted_form(video_resolution=None))
 
@@ -66,17 +79,18 @@ class VideoResolutionTest(unittest.TestCase):
         self.assertEqual(form["prompt[video_model]"], "seedance25")
         self.assertNotIn("prompt[video_resolution]", form)
 
-    def test_mcp_video_model_is_optional_and_points_at_list_models(self):
+    def test_mcp_video_model_is_optional_and_null_for_defaults(self):
         tool = next(tool for tool in CLI["operation_catalog"]() if tool["name"] == "generate_video")
         self.assertEqual(tool["inputSchema"]["required"], ["video_prompt", "idempotency_key"])
-        properties = tool["inputSchema"]["properties"]
-        self.assertIn("list_models type=video", properties["video_model"]["description"])
-        self.assertIn("with video_resolution", properties["video_model"]["description"])
+        video_model = tool["inputSchema"]["properties"]["video_model"]
+        self.assertEqual(video_model["anyOf"], [{"type": "string"}, {"type": "null"}])
+        self.assertIn("submit null for Astria defaults", video_model["description"])
+        self.assertIn("video_model=null", tool["description"])
         self.assertNotIn("astria models", json.dumps(CLI["operation_catalog"]()))
 
     def test_mcp_tool_accepts_video_resolution(self):
         tool = next(tool for tool in CLI["operation_catalog"]() if tool["name"] == "generate_video")
-        self.assertEqual(tool["inputSchema"]["properties"]["video_resolution"]["type"], "string")
+        self.assertEqual(tool["inputSchema"]["properties"]["video_resolution"]["anyOf"], [{"type": "string"}, {"type": "null"}])
         self.assertIn("video_resolution", CLI["operation_contract"]()["operations"]["generate_video"]["defaults"])
 
 
