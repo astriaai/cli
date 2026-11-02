@@ -2947,7 +2947,7 @@ OPERATION_POLICIES = {
     "list_references": (("tunes", "list"), True, set()),
     "get_reference": (("tunes", "get"), True, set()),
     "update_reference": (("tunes", "update"), False, set()),
-    "create_reference": (("tunes", "create"), False, {"image"}),
+    "create_reference": (("tunes", "create"), False, {"image", "model", "model_type"}),
     "generate_images": (("generate",), False, {"wait", "video_prompt"}),
     "generate_video": (("video",), False, {"wait", "input_image"}),
     "generate_music": (("music",), False, {"wait"}),
