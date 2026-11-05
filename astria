@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.26.0"
+VERSION = "1.27.0"
 
 
 def _platform_token():
@@ -293,9 +293,9 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                 'result': {}},
  'list_templates': {'method': 'GET',
                     'path': '/packs',
-                    'fields': [['limit', 'limit', 'truthy'], ['offset', 'offset', 'truthy']],
+                    'fields': [['limit', 'limit', 'truthy'], ['offset', 'offset', 'truthy'], ['sort', 'sort', 'truthy']],
                     'target': 'query',
-                    'result': {'pick': ['id', 'title', 'slug', 'subtitle', 'main_class_name', 'costs']}},
+                    'result': {'pick': ['id', 'title', 'slug', 'subtitle', 'main_class_name', 'costs', 'thumbnail_url']}},
  'get_template': {'method': 'GET', 'path': '/p/{slug}.json', 'fields': [], 'target': 'query', 'result': {}},
  'run_template': {'method': 'POST',
                   'path': '/p/{slug}/tunes',
@@ -2773,6 +2773,8 @@ def build_parser(models_record=None):
     p = packs.add_parser("list", parents=[ws_parent], help="List reusable Astria photoshoot templates with their IDs and titles")
     p.add_argument("--limit")
     p.add_argument("--offset")
+    p.add_argument("--sort", choices=["recently_used"], default="recently_used",
+                   help="the templates last generated from in this workspace first, never-used ones after (default: %(default)s)")
     p.set_defaults(func=cmd_packs_list)
     p = packs.add_parser("get", parents=[ws_parent], help="get a pack and its template prompts")
     p.add_argument("slug", help="pack slug or id")
@@ -3049,7 +3051,7 @@ OPERATION_DESCRIPTIONS = {
     'generate_music': 'Use this when the user asks for an Astria song, jingle, soundtrack, background music or instrumental track. Provide text as the song description (genre, mood, instruments, vocals, tempo); pass lyrics with the model\'s section tags such as [Verse] and [Chorus] to sing given words, omit lyrics to let the model write them, or set instrumental=true for no vocals. model is optional and defaults to default_music_model; call list_models type=music to choose another music model or check lyrics length limits, section tags and the price of each kind of song. For MiniMax, audio_reference selects Music Cover: an MP3 with vocals, 6 seconds to 6 minutes, a 10-300 character style prompt, and no lyrics or instrumental flag. It does not guarantee preservation of exact event timing. Do not call for lyric writing or music advice alone; use generate_video generate_audio for native video sound. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id; check get_prompt for the finished audio or errors without resubmitting.',
     'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs for get_prompt; expand prompt.comments to inspect review feedback.',
     'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass its returned id. Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
-    'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
+    'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs and thumbnails, most recently used first; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
     'get_template': 'Use this when resolving a selected Astria photoshoot template by slug or ID before running it or inspecting its prompts, reference slots, and baseline pricing. Does not generate images or modify the template. Preserve the returned reference-slot order when calling run_template.',
     'run_template': 'Use this when the user asks to run a saved Astria photoshoot/template on their person or product, repeat an existing lookbook with a new SKU, or generate portraits from a selected pack. Resolve the template and reference slots first with get_template; pass tune_id entries in slot order, supported photo inputs, or tune_replacements mapping original IDs to replacement ID arrays to swap selected products while retaining other references. Do not substitute one generic image for a requested template run, and do not run a template for browsing or pricing advice. Creates paid Astria content within the requested scope; requires an idempotency_key. prompt_attributes supplies additional per-prompt overrides as a JSON object of string values and takes precedence over matching named parameters. Returns the submitted order/prompt IDs; use list_prompts to find prompt IDs and get_prompt to check outputs without rerunning.',
     'start_agent_run': 'Delegate work to an Astria agent only when the user explicitly requests delegation or a required step cannot run in the current host. Execute workflows directly with available Astria tools and local capabilities; a named skill or multi-step request alone does not require an agent run. Assess available tools rather than desktop, web, or embedded client labels. Delegate only the necessary stage when practical: for muxing, pass existing video and audio URLs instead of regenerating them. Pass the workspace ID and a scoped message, starting with /skill-name when applicable, with every required HTTPS media URL (upload local files with create_upload first). The run may generate paid media within the request; requires an idempotency_key. Returns a task id; poll get_agent_run until completed, input_required, failed or canceled. Use generate_images, generate_video or generate_music for direct generations. An Astria agent run must never start another run.',
