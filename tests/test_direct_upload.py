@@ -185,8 +185,8 @@ class DirectUploadTest(unittest.TestCase):
                 resolution=None, input_image=None, mask_image=None, pack_id=None,
                 base_pack_id=None, video_model="seedance2_fast_720p",
                 video_prompt="dress moves", duration="5", image_references=[paths[1]],
-                first_frame=paths[2], last_frame=paths[3], input_video=paths[4],
-                audio_reference=paths[5], generate_audio=None, workspace=None, wait=False,
+                first_frame=paths[2], last_frame=paths[3], video_references=[paths[4]],
+                audio_references=[paths[5]], generate_audio=None, workspace=None, wait=False,
             )
 
             with patch.dict(CLI["_generate"].__globals__, {
@@ -203,8 +203,8 @@ class DirectUploadTest(unittest.TestCase):
         self.assertIn(("prompt[image_references][]", "signed-1"), prompt_form)
         self.assertIn(("prompt[video_first_frame]", "signed-2"), prompt_form)
         self.assertIn(("prompt[video_last_frame]", "signed-3"), prompt_form)
-        self.assertIn(("prompt[input_video]", "signed-4"), prompt_form)
-        self.assertIn(("prompt[audio_reference]", "signed-5"), prompt_form)
+        self.assertIn(("prompt[video_references][]", "signed-4"), prompt_form)
+        self.assertIn(("prompt[audio_references][]", "signed-5"), prompt_form)
         self.assertFalse(any(str(value).startswith("@") for _, value in prompt_form))
 
     def test_pack_run_direct_uploads_training_images_before_api_call(self):

@@ -16,13 +16,41 @@ FAMILIES = {
 }
 
 
+class ReferenceMediaTest(unittest.TestCase):
+    def video_args(self, *argv):
+        parser = CLI["operation_parser"](("video",))
+        return parser.parse_args(["--video-prompt", "x", *argv])
+
+    def test_repeated_flags_keep_order_and_old_flag_still_works(self):
+        args = self.video_args("--video-reference", "https://a/1.mp4", "--input-video", "https://a/2.mp4",
+                               "--audio-reference", "https://a/1.mp3", "--audio-reference", "https://a/2.mp3")
+        self.assertEqual(args.video_references, ["https://a/1.mp4", "https://a/2.mp4"])
+        self.assertEqual(args.audio_references, ["https://a/1.mp3", "https://a/2.mp3"])
+
+    def test_catalog_shows_only_the_arrays(self):
+        tool = next(item for item in CLI["operation_catalog"]() if item["name"] == "generate_video")
+        properties = tool["inputSchema"]["properties"]
+        self.assertEqual(properties["video_references"]["type"], "array")
+        self.assertEqual(properties["audio_references"]["type"], "array")
+        self.assertIn("@Video1", properties["video_references"]["description"])
+        self.assertNotIn("input_video", properties)
+        self.assertNotIn("audio_reference", properties)
+        music = next(item for item in CLI["operation_catalog"]() if item["name"] == "generate_music")
+        self.assertIn("audio_reference", music["inputSchema"]["properties"])
+
+    def test_form_mixes_files_and_urls_in_one_ordered_array(self):
+        definition = CLI["API_OPERATIONS"]["generate_video"]
+        field = next(spec for spec in definition["fields"] if spec[1] == "video_references")
+        self.assertEqual(field, ["prompt[video_references][]", "video_references", "media_array", "prompt[video_references][]"])
+
+
 class VideoResolutionTest(unittest.TestCase):
     def submitted_form(self, **overrides):
         args = SimpleNamespace(
             model="123", references=[], text=None, num_images="1", seed=None, aspect_ratio="16:9",
             resolution=None, input_image=None, mask_image=None, pack_id=None, base_pack_id=None,
             video_model="seedance25", video_resolution="1080p", video_prompt="slow dolly-in", duration="5",
-            image_references=None, first_frame=None, last_frame=None, input_video=None, audio_reference=None,
+            image_references=None, first_frame=None, last_frame=None, video_references=None, audio_references=None,
             generate_audio=None, workspace=None, wait=False,
         )
         vars(args).update(overrides)

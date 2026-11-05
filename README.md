@@ -199,7 +199,7 @@ astria variate https://example.com/source.mp4 \
 
 For MCP, the same workflow uses `classify_image` (for unnamed new reference
 images), `create_reference`, `compose_video_edit`, and `generate_video` with
-`input_video`. Pass the composition result's generation fields unchanged;
+`video_references`. Pass the composition result's generation fields unchanged;
 `video_model: null` lets the API apply its default. Poll `get_prompt` for results.
 Each write uses its own idempotency key, reused only for an identical retry.
 

@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.25.1"
+VERSION = "1.26.0"
 
 
 def _platform_token():
@@ -238,8 +238,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                ['prompt[video_duration]', 'duration', 'truthy'],
                                ['prompt[video_first_frame]', 'first_frame', 'media'],
                                ['prompt[video_last_frame]', 'last_frame', 'media'],
-                               ['prompt[input_video]', 'input_video', 'media'],
-                               ['prompt[audio_reference]', 'audio_reference', 'media'],
+                               ['prompt[video_references][]', 'video_references', 'media_array', 'prompt[video_references][]'],
+                               ['prompt[audio_references][]', 'audio_references', 'media_array', 'prompt[audio_references][]'],
                                ['prompt[generate_audio]', 'generate_audio', 'boolean'],
                                ['prompt[video_audio]', 'generate_audio', 'boolean']],
                     'target': 'form',
@@ -1521,7 +1521,7 @@ def cmd_generate(args, cfg):
 
 def cmd_video(args, cfg):
     if getattr(args, "input_image", None):
-        die("--input-image is for image generation/editing. For video, use --first-frame, --last-frame, --input-video, --image-reference, or --reference NAME=PATH_OR_URL.")
+        die("--input-image is for image generation/editing. For video, use --first-frame, --last-frame, --video-reference, --image-reference, or --reference NAME=PATH_OR_URL.")
     _generate(args, cfg, video=True)
 
 
@@ -2660,10 +2660,15 @@ def build_parser(models_record=None):
                        "attach an ordered raw image reference; repeat for each image"))
     p.add_argument("--first-frame", help="URL or file overriding the rendered first frame")
     p.add_argument("--last-frame", help="URL or file for keyframe models")
-    p.add_argument("--input-video", help="URL or file for motion-control models")
-    p.add_argument("--audio-reference", help=video_capability_help(
-        models_record, "supports_audio_reference",
-        "URL or file — reference audio track the video is driven by"))
+    p.add_argument("--input-video", dest="video_references", action="append", help=argparse.SUPPRESS)
+    p.add_argument("--video-reference", dest="video_references", action="append", metavar="PATH_OR_URL",
+                   help="URL or file for a source or reference video; repeat for each, in the order the prompt names them "
+                        "(@Video1, @Video2); list_models gives each model's max_reference_videos")
+    p.add_argument("--audio-reference", dest="audio_references", action="append", metavar="PATH_OR_URL",
+                   help=video_capability_help(
+                       models_record, "supports_audio_reference",
+                       "URL or file for a reference audio track; repeat for each, in the order the prompt names them "
+                       "(@Audio1, @Audio2); list_models gives each model's max_reference_audios"))
     p.add_argument("--generate-audio", action=argparse.BooleanOptionalAction, default=None,
                    help=video_capability_help(
                        models_record, "generates_audio",
@@ -2989,7 +2994,7 @@ CLI_ONLY_COMMANDS = {
     ("login",): "Host-local credential storage", ("logout",): "Host-local credential removal",
     ("whoami",): "MCP exposes authenticated get_profile separately", ("config",): "Host-local configuration",
     ("upgrade",): "Installs the local executable", ("prompts", "wait"): "Blocking local polling; MCP uses get_prompt/events",
-    ("variate",): "Local orchestration; MCP uses classify_image/create_reference, compose_video_edit, then generate_video with input_video",
+    ("variate",): "Local orchestration; MCP uses classify_image/create_reference, compose_video_edit, then generate_video with video_references",
     ("inspect-video",): "Local upload and blocking convenience; MCP uses inspect_video and get_video_inspection",
     ("download",): "Writes local files", ("agent", "handoff"): "Embedded-agent session handoff",
     ("landing", "get"): "Local HTML extraction; MCP get_workspace returns metadata",
@@ -3020,7 +3025,7 @@ def validate_operation_coverage():
 
 OPERATION_DESCRIPTIONS = {
     'classify_image': 'Identify the subject class and characteristics of an image before creating a replacement reference. Supply source as a public HTTPS image URL, uploading local files with create_upload first. Optional class_name entries restrict the allowed classes. Returns class_name and available caption/description metadata, or error. Use the class_name with create_reference. May invoke a paid provider; requires an idempotency_key for safe retries.',
-    'compose_video_edit': 'Prepare the Variate workflow when the user wants to edit an existing video while preserving its shots, timing and performance. Supply brief and/or saved replacement reference IDs in tune_id. For new reference images, first use classify_image if their class is unknown, then create_reference. Returns video_prompt, video_model, generate_audio and num_images for generate_video. Submit those returned fields with the source video HTTPS URL as input_video, and the same workspace; use get_prompt to follow the generation. No source-video inspection is needed. This tool only writes the edit prompt and does not generate a video. Requires an idempotency_key; reuse it for identical retries.',
+    'compose_video_edit': 'Prepare the Variate workflow when the user wants to edit an existing video while preserving its shots, timing and performance. Supply brief and/or saved replacement reference IDs in tune_id. For new reference images, first use classify_image if their class is unknown, then create_reference. Returns video_prompt, video_model, generate_audio and num_images for generate_video. Submit those returned fields with the source video HTTPS URL as the only item of video_references, and the same workspace; use get_prompt to follow the generation. No source-video inspection is needed. This tool only writes the edit prompt and does not generate a video. Requires an idempotency_key; reuse it for identical retries.',
     'inspect_image': 'Describe an image as image-generation prompt text using Astria. Pass source as a public HTTPS image URL. For a local image, first complete its create_upload upload and use the returned URL. Optional name entries omit the appearance of those named reference subjects, such as dress or shoes. This is a paid inspection. Requires an idempotency_key; reuse the same key and arguments for an identical retry. Returns description synchronously, or error if inspection fails. Does not generate an image.',
     'inspect_video': 'Start a paid video inspection to describe a video as timestamped text-to-video prompt text. Supply exactly one of file_url (public HTTPS) or blob_signed_id from a completed create_upload video upload. Optional tune_id reference IDs remove those subjects appearances from the description. Requires an idempotency_key; reuse the same key and arguments for a retry. Returns an inspection id and pending status immediately. Poll get_video_inspection every 2-5 seconds until completed or failed; do not resubmit to check progress.',
     'get_video_inspection': 'Poll a video inspection started with inspect_video. Pass its inspection id. Returns status pending, processing, completed or failed; completed includes description and available model/provider/usage metadata, failed includes error. Poll every 2-5 seconds while pending or processing and stop on completed or failed. Inspections expire one hour after their last update and are visible only to the user who started them. An unknown or expired inspection returns an error. Does not start an inspection or charge credits.',
@@ -3040,7 +3045,7 @@ OPERATION_DESCRIPTIONS = {
     'get_reference': 'Use this when inspecting a selected Astria identity or product reference and its training images before a photoshoot or try-on. Returns the saved subject class and reference details. A reference token uses <model_type:ID:1> followed by that class. Does not create or alter the reference.',
     'create_reference': 'Use this when a supplied person or product needs one reusable Astria reference for consistent headshots, virtual try-on, product shots, or multiple scenes. Provide real HTTPS photo URLs, a subject class in name, and a human label in title. Reuse an existing reference when available. Creates paid content only within the requested generation/reference scope; requires an idempotency_key. Returns the new reference ID and class; reuse them across generations. Does not return a finished photoshoot.',
     'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. model is optional: omit it for the catalog default image model, and call list_models type=image only to choose another model or check resolutions. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
-    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_prompt. Submit video_model=null and video_resolution=null unless the user explicitly selected those settings; Astria resolves its defaults. Do not select a model or resolution yourself or copy catalog defaults into the request. Call list_models type=video only to resolve an explicit selection or check capabilities. generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
+    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_prompt. Submit video_model=null and video_resolution=null unless the user explicitly selected those settings; Astria resolves its defaults. Do not select a model or resolution yourself or copy catalog defaults into the request. Call list_models type=video only to resolve an explicit selection or check capabilities. generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and video_references/audio_references only when the chosen model supports them; the prompt names their items by position as @Video1 and @Audio1. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
     'generate_music': 'Use this when the user asks for an Astria song, jingle, soundtrack, background music or instrumental track. Provide text as the song description (genre, mood, instruments, vocals, tempo); pass lyrics with the model\'s section tags such as [Verse] and [Chorus] to sing given words, omit lyrics to let the model write them, or set instrumental=true for no vocals. model is optional and defaults to default_music_model; call list_models type=music to choose another music model or check lyrics length limits, section tags and the price of each kind of song. For MiniMax, audio_reference selects Music Cover: an MP3 with vocals, 6 seconds to 6 minutes, a 10-300 character style prompt, and no lyrics or instrumental flag. It does not guarantee preservation of exact event timing. Do not call for lyric writing or music advice alone; use generate_video generate_audio for native video sound. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id; check get_prompt for the finished audio or errors without resubmitting.',
     'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs for get_prompt; expand prompt.comments to inspect review feedback.',
     'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass its returned id. Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
@@ -3056,7 +3061,7 @@ OPERATION_DESCRIPTIONS = {
 
 REMOTE_MEDIA_ARGUMENTS = {
     "image_urls", "image_url", "input_image", "mask_image", "references", "image_references",
-    "first_frame", "last_frame", "input_video", "audio_reference", "file_url", "source",
+    "first_frame", "last_frame", "video_references", "audio_references", "audio_reference", "file_url", "source",
 }
 
 
