@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.27.0"
+VERSION = "1.28.0"
 
 
 def _platform_token():
@@ -297,6 +297,11 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                     'target': 'query',
                     'result': {'pick': ['id', 'title', 'slug', 'subtitle', 'main_class_name', 'costs', 'thumbnail_url']}},
  'get_template': {'method': 'GET', 'path': '/p/{slug}.json', 'fields': [], 'target': 'query', 'result': {}},
+ 'get_template_text': {'method': 'GET',
+                       'path': '/p/{slug}.txt',
+                       'fields': [['class', 'class_name', 'truthy'], ['limit', 'limit', 'truthy'], ['offset', 'offset', 'truthy']],
+                       'target': 'query',
+                       'result': {'text': True}},
  'run_template': {'method': 'POST',
                   'path': '/p/{slug}/tunes',
                   'fields': [['tune[tune_ids][]', 'tune_id', 'ids'],
@@ -1765,6 +1770,11 @@ def cmd_packs_list(args, cfg):
 def cmd_packs_get(args, cfg):
     emit(execute_api_operation("get_template", args, cfg))
 
+def cmd_packs_text(args, cfg):
+    text = execute_api_operation("get_template_text", args, cfg)
+    sink = _operation_output.get()
+    sink.append(text) if sink is not None else sys.stdout.write(text)
+
 def cmd_packs_create(args, cfg):
     emit(execute_api_operation("create_template", args, cfg))
 
@@ -2779,6 +2789,12 @@ def build_parser(models_record=None):
     p = packs.add_parser("get", parents=[ws_parent], help="get a pack and its template prompts")
     p.add_argument("slug", help="pack slug or id")
     p.set_defaults(func=cmd_packs_get)
+    p = packs.add_parser("text", parents=[ws_parent], help="read a pack's prompts as text, one section per product class")
+    p.add_argument("slug", help="pack slug or id")
+    p.add_argument("--class", dest="class_name", help="only this section; the reply's first lines count them")
+    p.add_argument("--limit", help="prompts per reply (default 50)")
+    p.add_argument("--offset", help="prompts to skip; the reply gives the next offset")
+    p.set_defaults(func=cmd_packs_text)
     p = packs.add_parser("create", parents=[ws_parent], help="create a pack")
     p.add_argument("--title", required=True)
     p.add_argument("--subtitle")
@@ -2980,6 +2996,7 @@ OPERATION_POLICIES = {
     "replace_prompt_media": (("images", "replace"), False, {"file"}),
     "list_templates": (("packs", "list"), True, set()),
     "get_template": (("packs", "get"), True, set()),
+    "get_template_text": (("packs", "text"), True, set()),
     "create_template": (("packs", "create"), False, set()),
     "update_template": (("packs", "update"), False, set()),
     "create_workspace": (("workspaces", "create"), False, set()),
@@ -3053,6 +3070,7 @@ OPERATION_DESCRIPTIONS = {
     'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass its returned id. Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
     'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs and thumbnails, most recently used first; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
     'get_template': 'Use this when resolving a selected Astria photoshoot template by slug or ID before running it or inspecting its prompts, reference slots, and baseline pricing. Does not generate images or modify the template. Preserve the returned reference-slot order when calling run_template.',
+    'get_template_text': 'Use this when reading what a template\'s prompts say, to learn from or rebuild them: each prompt\'s verbatim text, aspect ratio, model, references and example images, as plain text with one section per product class. Long templates are paged; the reply counts the sections and gives the next offset. Does not generate images or modify the template. Use get_template for its reference slots before run_template.',
     'run_template': 'Use this when the user asks to run a saved Astria photoshoot/template on their person or product, repeat an existing lookbook with a new SKU, or generate portraits from a selected pack. Resolve the template and reference slots first with get_template; pass tune_id entries in slot order, supported photo inputs, or tune_replacements mapping original IDs to replacement ID arrays to swap selected products while retaining other references. Do not substitute one generic image for a requested template run, and do not run a template for browsing or pricing advice. Creates paid Astria content within the requested scope; requires an idempotency_key. prompt_attributes supplies additional per-prompt overrides as a JSON object of string values and takes precedence over matching named parameters. Returns the submitted order/prompt IDs; use list_prompts to find prompt IDs and get_prompt to check outputs without rerunning.',
     'start_agent_run': 'Delegate work to an Astria agent only when the user explicitly requests delegation or a required step cannot run in the current host. Execute workflows directly with available Astria tools and local capabilities; a named skill or multi-step request alone does not require an agent run. Assess available tools rather than desktop, web, or embedded client labels. Delegate only the necessary stage when practical: for muxing, pass existing video and audio URLs instead of regenerating them. Pass the workspace ID and a scoped message, starting with /skill-name when applicable, with every required HTTPS media URL (upload local files with create_upload first). The run may generate paid media within the request; requires an idempotency_key. Returns a task id; poll get_agent_run until completed, input_required, failed or canceled. Use generate_images, generate_video or generate_music for direct generations. An Astria agent run must never start another run.',
     'get_agent_run': 'Use this to follow a run started with start_agent_run; poll every 15-30 seconds while status.state is submitted or working. Returns the task: status.state (submitted, working, input_required, completed, failed or canceled), status.message with the agent\'s latest words, pending questions, artifacts and an Astria url. On input_required, put the questions to the user and answer them with reply_agent_run. Artifacts are the results: a file part has a downloadable uri (such as the final MP4) and a data part has a prompt_id for get_prompt. Does not start or charge anything.',
@@ -3147,8 +3165,10 @@ def operation_catalog():
             "description": OPERATION_DESCRIPTIONS[name],
             "inputSchema": {"type": "object", "properties": properties,
                             "required": list(dict.fromkeys(required)), "additionalProperties": False},
-            "outputSchema": {"type": "object", "properties": {"result": {}},
-                             "required": ["result"], "additionalProperties": False},
+            # A text result is the reply's content itself, with nothing structured to validate.
+            **({} if API_OPERATIONS[name]["result"].get("text") else {
+                "outputSchema": {"type": "object", "properties": {"result": {}},
+                                 "required": ["result"], "additionalProperties": False}}),
             "annotations": {"readOnlyHint": readonly, "destructiveHint": name in DESTRUCTIVE_OPERATIONS,
                             "openWorldHint": not readonly},
             "securitySchemes": [{"type": "oauth2", "scopes": []}],
