@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.29.0"
+VERSION = "1.30.0"
 
 
 def _platform_token():
@@ -173,7 +173,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                 ['offset', 'offset', 'truthy'],
                                 ['model_type', 'model_type', 'truthy'],
                                 ['branch', 'branch', 'truthy'],
-                                ['creation_source', 'creation_source', 'truthy']],
+                                ['creation_source', 'creation_source', 'truthy'],
+                                ['archived', 'archived', 'truthy']],
                      'target': 'query',
                      'result': {'pick': ['id', 'title', 'name', 'model_type', 'creation_source', 'creation_client', 'orig_images']},
                      'path_choice': ['gallery', '/gallery/tunes']},
@@ -367,6 +368,11 @@ API_OPERATIONS.update({
         "fields": [["pack_id", "pack_id", "nullable_id"], ["base_pack_id", "base_pack_id", "nullable_id"],
             ["workspace_id", "workspace_id", "nullable_id"]], "result": {},
         "requires_present": ["pack_id", "base_pack_id", "workspace_id"]},
+    # Archiving hides a prompt or reference from lists and is undone by unarchive; nothing is deleted.
+    "archive_prompt": {"method": "PATCH", "path": "/prompts/{id}/archive", "target": "json_body", "fields": [], "result": {},
+        "path_choice": ["unarchive", "/prompts/{id}/unarchive"]},
+    "archive_reference": {"method": "PATCH", "path": "/tunes/{id}/archive", "target": "json_body", "fields": [], "result": {},
+        "path_choice": ["unarchive", "/tunes/{id}/unarchive"]},
     # Headless agent runs, reported as A2A tasks. The run id is its chat session id.
     "start_agent_run": {"method": "POST", "path": "/api/agent_runs", "target": "form",
         "fields": [["workspace_id", "workspace", "value"], ["message", "message", "value"]], "result": {}},
@@ -1367,6 +1373,9 @@ def cmd_tunes_create(args, cfg):
 def cmd_tunes_update(args, cfg):
     emit(execute_api_operation("update_reference", args, cfg))
 
+def cmd_tunes_archive(args, cfg):
+    emit(execute_api_operation("archive_reference", args, cfg))
+
 
 # --------------------------------------------------------------------------
 # commands — prompts
@@ -1379,6 +1388,9 @@ def cmd_prompts_get(args, cfg):
 
 def cmd_prompts_update(args, cfg):
     emit(execute_api_operation("update_prompt", args, cfg))
+
+def cmd_prompts_archive(args, cfg):
+    emit(execute_api_operation("archive_prompt", args, cfg))
 
 def cmd_prompts_enhance(args, cfg):
     emit(execute_api_operation("enhance_video", args, cfg))
@@ -2514,6 +2526,7 @@ def build_parser(models_record=None):
     p.add_argument("--branch", help="filter by branch (e.g. partner-1 to discover partner models)")
     p.add_argument("--creation-source", choices=["web", "mcp", "cli", "photoshop", "api"], help="filter by creation source")
     p.add_argument("--gallery", action="store_true", help="query the public gallery instead")
+    p.add_argument("--archived", action="store_true", help="only archived tunes; omitted selects unarchived tunes")
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_tunes_list)
@@ -2542,6 +2555,10 @@ def build_parser(models_record=None):
     p.add_argument("--text", help="injected text (stored in characteristics.text); omitted preserves it, an empty string clears it")
     p.add_argument("--sources", type=structured_argument("sources"), help="catalog provenance as a JSON array of source records")
     p.set_defaults(func=cmd_tunes_update)
+    p = tunes.add_parser("archive", parents=[ws_parent], help="archive a tune, hiding it from lists without deleting it")
+    p.add_argument("id")
+    p.add_argument("--unarchive", action="store_true", help="restore an archived tune instead")
+    p.set_defaults(func=cmd_tunes_archive)
 
     # prompts
     prompts = sub.add_parser("prompts", help="image/video generation records").add_subparsers(dest="sub", required=True)
@@ -2571,6 +2588,10 @@ def build_parser(models_record=None):
     p.add_argument("--base-pack-id", help="bind as a pack one-off")
     p.add_argument("--workspace-id")
     p.set_defaults(func=cmd_prompts_update)
+    p = prompts.add_parser("archive", parents=[ws_parent], help="archive a prompt, hiding it from lists without deleting it")
+    p.add_argument("id")
+    p.add_argument("--unarchive", action="store_true", help="restore an archived prompt instead")
+    p.set_defaults(func=cmd_prompts_archive)
     p = prompts.add_parser("enhance", parents=[ws_parent], help="upscale a finished video or increase its frame rate, as a new paid prompt")
     p.add_argument("id", help="prompt ID of a finished video")
     p.add_argument("--video-upscale-model", choices=["seedvr2"], help="upscaler; pass this or --video-fps-model, not both")
@@ -2999,6 +3020,7 @@ OPERATION_POLICIES = {
     "list_references": (("tunes", "list"), True, set()),
     "get_reference": (("tunes", "get"), True, set()),
     "update_reference": (("tunes", "update"), False, set()),
+    "archive_reference": (("tunes", "archive"), False, set()),
     "create_reference": (("tunes", "create"), False, {"image", "model", "model_type"}),
     "generate_images": (("generate",), False, {"wait", "video_prompt"}),
     "generate_video": (("video",), False, {"wait", "input_image"}),
@@ -3006,6 +3028,7 @@ OPERATION_POLICIES = {
     "list_prompts": (("prompts", "list"), True, set()),
     "get_prompt": (("prompts", "get"), True, set()),
     "update_prompt": (("prompts", "update"), False, set()),
+    "archive_prompt": (("prompts", "archive"), False, set()),
     "enhance_video": (("prompts", "enhance"), False, set()),
     "attach_prompt_media": (("prompts", "attach"), False, {"file"}),
     "replace_prompt_media": (("images", "replace"), False, {"file"}),
@@ -3074,6 +3097,8 @@ OPERATION_DESCRIPTIONS = {
     'update_template': 'Update an existing template title, subtitle or reference categories. Does not generate images or replace its prompts. Inspect get_template before changing its category slots.',
     'update_reference': 'Update a selected reference title, subject class, short description, injected text or verified catalog source records. text sets characteristics.text; omit it to preserve the current text or pass an empty string to clear it. Other characteristics are preserved. Sources include provider, account_key, resource_type, external_id and captured metadata. Does not retrain the reference or generate images.',
     'update_prompt': 'Assign an existing prompt to a template, clear template membership, or move it to an authorized workspace. Pass pack_id or base_pack_id as the string null to clear that assignment. Does not generate, delete or retry an image.',
+    'archive_prompt': 'Archive an image, video or music prompt only when the user asks to archive, hide or clean up that result. Pass its id. Archiving hides the prompt from galleries and list_prompts without deleting its media or refunding credits; list_prompts archived=true finds archived prompts. Set unarchive=true to restore one. Requires an idempotency_key.',
+    'archive_reference': 'Archive a saved reference only when the user asks to archive, hide or clean up that person, product or garment. Pass its id. Archiving hides the reference from list_references without deleting it or its training images; list_references archived=true finds archived references; templates and prompts that use it keep working. Set unarchive=true to restore one. Requires an idempotency_key. Returns id and archived.',
     'list_models': 'Use this when choosing an Astria image, video or music model or checking supported media inputs, image resolutions, aspect ratios, lyrics limits, song prices, and defaults. Pass type (image, video or music) to get only that catalog. Returns the live model catalog and model names/tune IDs; does not generate media or spend credits. For video generation, submit null model and resolution fields unless the user explicitly selected them; let Astria resolve defaults. For images and music, use the explicit user selection or catalog default.',
     'list_workspaces': 'Use this when finding an Astria workspace for a team or brand photoshoot. Returns authorized workspace IDs; expand migration to include their website URLs for duplicate detection. Use the selected ID consistently for references, templates, and generations. Does not create a workspace or generate media.',
     'list_references': 'Use this when finding a saved person, model, garment, product, or SKU for consistent photos, virtual try-on, headshots, or video. Search title/product name/SKU; gallery=true finds public model references. Returns reusable reference IDs and subject classes. Does not create references or generate media; inspect a selected match with get_reference.',
